@@ -17,7 +17,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y cmake gfortran
-      
+  
       - name: Build the SWD shared library
         run: |
           cd src/api/python/Cmake
@@ -26,24 +26,35 @@ jobs:
           cd Build_Linux
           cmake -DCMAKE_Fortran_COMPILER=gfortran-10 -DSTATIC=OFF ..
           make
-        
+
       - name: Prepare the Python sources
         run: |
           cd src/api/python/distribution
-          mkdir spectral_wave_data
-          cp -r ../spectral_wave_data/* spectral_wave_data/.
-          cp -r ../Cmake/Build_Linux/* spectral_wave_data/.
-          cp -r ../../c/spectral_wave_data.h spectral_wave_data/.
-          cp -r ../../../../icons/SWD_logo.ico spectral_wave_data/.
+  
+          cp -rv ../spectral_wave_data .
+          cp -rv ../Cmake/Build_Linux/* spectral_wave_data/.
+          cp -v ../../c/spectral_wave_data.h spectral_wave_data/.
+          cp -v ../../../../icons/SWD_logo.ico spectral_wave_data/.
 
-          cp LICENSE.txt spectral_wave_data/.
-          cp README.txt spectral_wave_data/.
+          cp -v LICENSE.txt spectral_wave_data/.
+          cp -v README.txt spectral_wave_data/.
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.3"
+          python-version: 3.13
+          enable-cache: true
 
       - name: Build wheel
-        uses: pypa/cibuildwheel@v2.22.0
-        with:
-          package-dir: src/api/python/distribution
-          output-dir: src/api/python/distribution/wheelhouse
+        run: |
+          cd src/api/python/distribution
+
+          uv sync --only-group=build
+          uv build --wheel
+
+          mkdir wheelhouse
+          uv run auditwheel repair dist/*.whl
 
       - name: Upload Python wheels
         uses: actions/upload-artifact@v4

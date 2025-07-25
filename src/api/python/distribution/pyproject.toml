@@ -1,6 +1,21 @@
 [build-system]
 requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
+build-backend = "setuptools.build_meta:__legacy__"
 
-[tool.cibuildwheel]
-test-command = 'python -c "import spectral_wave_data; print(spectral_wave_data.SpectralWaveData)"'
+[dependency-groups]
+test = [
+    "pytest >= 8.0",
+]
+docs = [
+    # Dependencies required to build the documentation
+    "sphinx >= 8.0",
+    "sphinxcontrib.bibtex >= 2.0",
+]
+build = [
+    "auditwheel >= 6.0"
+]
+
+[tool.uv]
+# These groups are included by uv by default (for developers)
+# You can use uv overrides --no-group=test or --only-group=docs etc
+default-groups = ["test", "docs", "build"]
