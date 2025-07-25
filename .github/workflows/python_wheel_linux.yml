@@ -1,0 +1,52 @@
+name: "Build Python Wheel on Linux"
+
+on: [push, pull_request]
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ]
+  
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the build toolchain
+        run: |
+          sudo apt update
+          sudo apt install -y cmake gfortran
+      
+      - name: Build the SWD shared library
+        run: |
+          cd src/api/python/Cmake
+          rm -rf Build_Linux
+          mkdir Build_Linux
+          cd Build_Linux
+          cmake -DCMAKE_Fortran_COMPILER=gfortran-10 -DSTATIC=OFF ..
+          make
+        
+      - name: Prepare the Python sources
+        run: |
+          cd src/api/python/distribution
+          mkdir spectral_wave_data
+          cp -r ../spectral_wave_data/* spectral_wave_data/.
+          cp -r ../Cmake/Build_Linux/* spectral_wave_data/.
+          cp -r ../../c/spectral_wave_data.h spectral_wave_data/.
+          cp -r ../../../../icons/SWD_logo.ico spectral_wave_data/.
+
+          cp LICENSE.txt spectral_wave_data/.
+          cp README.txt spectral_wave_data/.
+
+      - name: Build wheel
+        uses: pypa/cibuildwheel@v2.22.0
+        with:
+          package-dir: src/api/python/distribution
+          output-dir: src/api/python/distribution/wheelhouse
+
+      - name: Upload Python wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-wheels-${{ runner.os }}
+          path: src/api/python/distribution/wheelhouse

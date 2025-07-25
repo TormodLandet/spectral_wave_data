@@ -1,0 +1,6 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.cibuildwheel]
+test-command = 'python -c "import spectral_wave_data; print(spectral_wave_data.SpectralWaveData)"'
