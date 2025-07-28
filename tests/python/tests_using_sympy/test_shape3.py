@@ -2,14 +2,13 @@
 Test spectra_wave_shape_2 against analytical fields evaluated by sympy
 """
 
-import sys, os
-import math, cmath
+import sys
+import os
+import math
 
 import pytest
 import numpy as np
 
-import shape_1
-import shape_2
 import shape_3
 import corsys
 import tfun
@@ -137,6 +136,7 @@ ts = [0.2, 0.23, 0.52]   # application time: First exact on 2dt, Then < dt, then
 
 def test_waves(make_waves):
     swd_anal, swd_num1, swd_num2, swd_num3, nsf = make_waves
+    quick_check = os.environ.get("SWD_TEST_TYPE", "normal") == "quick"
 
     #swd_anal.dump_spectral_fun(j=0, dt=0.01, tmax=1.0)
     #swd_anal.dump_spectral_fun(j=1, dt=0.01, tmax=1.0)
@@ -158,6 +158,10 @@ def test_waves(make_waves):
                     phi_anal = swd_anal.phi(x, y, z, t)
                     phi_num3 = swd_num3.phi(x, y, z)
                     assert math.isclose(phi_num3, phi_anal, rel_tol=1e-04, abs_tol=1e-04)
+
+                    if quick_check:
+                        continue
+
                     if swd_num1 is not None:
                         phi_num1 = swd_num1.phi(x, y, z)
                         assert math.isclose(phi_num1, phi_num3, rel_tol=1e-04, abs_tol=1e-04)

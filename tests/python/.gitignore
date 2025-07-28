@@ -2,3 +2,4 @@ report.html
 assets
 .coverage
 .pytest_cache
+.venv

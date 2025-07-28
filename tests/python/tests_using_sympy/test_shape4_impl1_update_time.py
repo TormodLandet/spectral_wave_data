@@ -2,18 +2,18 @@
 Test spectra_wave_shape_4 impl=1 for update_time
 """
 
-import sys, os
-import math, cmath
-import numpy as np
+import sys
+import os
+import math
 
+import numpy as np
 import pytest
 
 import shape_4
 import corsys
 import tfun
 
-from spectral_wave_data import SpectralWaveData, SwdError, SwdFileCantOpenError, \
-      SwdFileBinaryError, SwdFileDataError, SwdInputValueError, SwdAllocateError
+from spectral_wave_data import SpectralWaveData, SwdFileDataError, SwdInputValueError
 
 assert sys.version_info > (3, 4)
 

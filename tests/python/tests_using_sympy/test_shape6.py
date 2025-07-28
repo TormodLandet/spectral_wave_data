@@ -2,8 +2,9 @@
 Test spectra_wave_shape_2 against analytical fields evaluated by sympy
 """
 
-import sys, os
-import math, cmath
+import sys
+import os
+import math
 
 import pytest
 import numpy as np
@@ -108,6 +109,7 @@ ts = [0.0, 15.2]         # application time
 
 def test_waves(make_waves):
     swd_anal, swd_num = make_waves
+    quick_check = os.environ.get("SWD_TEST_TYPE", "normal") == "quick"
 
     for t in ts:
 
@@ -120,6 +122,9 @@ def test_waves(make_waves):
                     phi_anal = swd_anal.phi(x, y, z, t)
                     phi_num = swd_num.phi(x, y, z)
                     assert math.isclose(phi_anal, phi_num, rel_tol=1e-04, abs_tol=1e-04)
+
+                    if quick_check:
+                        continue
 
                     stream_anal = swd_anal.stream(x, y, z, t)
                     stream_num = swd_num.stream(x, y, z)

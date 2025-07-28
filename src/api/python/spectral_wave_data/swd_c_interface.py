@@ -8,13 +8,36 @@ Created - 2019-08-11
 
 import sys
 import os
-import platform
+from pathlib import Path
 from ctypes import c_bool, c_double, c_int, c_char_p, c_void_p, Structure, CDLL
 
 assert sys.version_info >= (2, 7, 11)
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-if platform.system() == "Windows":
+
+def find_library(library_name: str) -> Path:
+    """
+    Find the library in a directory named "spectral_wave_data"
+    on the search path. Start looking right beside this file
+    """
+    dirs_to_search = [Path(__file__).parent]
+    for pck_dir in sys.path:
+        pth = Path(pck_dir) / "spectral_wave_data"
+        if pth.is_dir():
+            dirs_to_search.append(Path(pth))
+
+    for dir in dirs_to_search:
+        lib_path = dir / library_name
+        if lib_path.is_file():
+            return lib_path.resolve(strict=True)
+
+    raise FileNotFoundError(
+        "ERROR: Cannot find the compiled SWD library!\n"
+        f"Library {library_name} not found in the searched directories:"
+        "\n  - " + "\n  - ".join(str(d) for d in dirs_to_search)
+    )
+
+
+if sys.platform.startswith("win"):
     intel_redist_path = os.getenv("INTEL_DEV_REDIST")
     if intel_redist_path is None:
         msg = """
@@ -26,17 +49,21 @@ if platform.system() == "Windows":
                  These tools can be downloaded from microsoft.com
               """
         raise AssertionError(msg)
+    swdlib_path = find_library("SpectralWaveData.dll")
+
     if sys.version_info >= (3, 8):
         intel_redist_path = os.path.join(
             intel_redist_path, "redist", "intel64", "compiler"
         )
-        os.add_dll_directory(HERE)
+        os.add_dll_directory(str(swdlib_path.parent))
         os.add_dll_directory(intel_redist_path)
-    swdlib = CDLL(str(os.path.join(HERE, "SpectralWaveData.dll")))
-elif platform.system() == "Linux":
-    swdlib = CDLL(str(os.path.join(HERE, "libSpectralWaveData.so")))
+
+elif sys.platform.startswith("linux"):
+    swdlib_path = find_library("libSpectralWaveData.so")
 else:
-    raise AssertionError("Not supported platform: " + platform.system())
+    raise OSError("Not supported platform: " + sys.platform)
+
+swdlib = CDLL(str(swdlib_path))
 
 """
 ================================================================================================

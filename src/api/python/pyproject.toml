@@ -42,6 +42,8 @@ tools = [
 [dependency-groups]
 test = [
     "pytest >= 8.0",
+    "numpy >= 2.0",
+    "sympy >= 1.0",
 ]
 docs = [
     # Dependencies required to build the documentation

@@ -46,6 +46,17 @@ jobs:
           # The file ends up in the "wheelhouse/" directory
           uv run auditwheel repair dist/*.whl
 
+      - name: Install the wheel and run some quick unit tests
+        run: |
+          cd tests/python
+          uv venv .venv
+
+          uv pip install --python .venv/bin/python \
+            numpy sympy pytest ../../src/api/python/wheelhouse/spectral_wave_data*.whl
+
+          export SWD_TEST_TYPE=quick
+          .venv/bin/python -m pytest -k shape2 -v
+
       - name: Upload Python wheels
         uses: actions/upload-artifact@v4
         with:
