@@ -49,5 +49,5 @@ jobs:
       - name: Upload Python wheels
         uses: actions/upload-artifact@v4
         with:
-          name: python-wheels-${{ matrix.os }}
+          name: python-wheels-manylinux
           path: src/api/python/wheelhouse

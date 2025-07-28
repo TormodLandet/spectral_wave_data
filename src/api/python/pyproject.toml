@@ -49,7 +49,9 @@ docs = [
     "sphinxcontrib.bibtex >= 2.0",
 ]
 build = [
-    "auditwheel >= 6.0; sys_platform=='linux'"
+    "cmake >= 4.0",
+    "auditwheel >= 6.0; sys_platform=='linux'",
+    "patchelf >= 0.17; sys_platform=='linux'",
 ]
 
 [build-system]
