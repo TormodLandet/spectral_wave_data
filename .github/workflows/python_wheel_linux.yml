@@ -6,16 +6,12 @@ jobs:
   build_wheels:
     name: Build oldest supported manylinux wheel
     runs-on: ubuntu-latest
-    container: quay.io/pypa/manylinux2014_x86_64
+    #container: quay.io/pypa/manylinux2014_x86_64  # Fails to run on GitHub Actions
+    container: quay.io/pypa/manylinux_2_28_x86_64  # GCC version 14, Redhat 8 / Ubuntu 18.10
     
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install the build toolchain
-        run: |
-          sudo apt update
-          sudo apt install -y cmake gfortran
-  
       - name: Compile the SWD Fortran library
         run: |
           cd src/api/python/Cmake
