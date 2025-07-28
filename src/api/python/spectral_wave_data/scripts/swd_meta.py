@@ -1,73 +1,81 @@
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-
+import argparse
 import sys
 
-from spectral_wave_data import SpectralWaveData, SwdFileCantOpenError, \
-     SwdFileBinaryError, SwdFileDataError, SwdInputValueError, \
-     SwdAllocateError
+from spectral_wave_data import (
+    SpectralWaveData,
+    SwdFileCantOpenError,
+    SwdFileBinaryError,
+)
+
 
 def main():
-
-    narg = len(sys.argv)
-    if narg != 2:
-        print("Usage: swd_meta my.swd")
-        sys.exit()
-    file_swd = sys.argv[-1]
+    """
+    Show the metadata from an SWD file
+    """
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        prog="swd_meta", description="Display metadata for SWD files"
+    )
+    parser.add_argument("file_swd", help="SWD file to analyze")
+    args = parser.parse_args()
+    file_swd = args.file_swd
 
     try:
         swd = SpectralWaveData(file_swd, x0=0.0, y0=0.0, t0=0.0, beta=0.0)
-    except SwdFileCantOpenError as e:
-        print("Not able to open: %s" % file_swd)
-        sys.exit()
-    except SwdFileBinaryError as e:
-        print("This SWD file don't have the correct binary convention: %s" % file_swd)
-        sys.exit()
-    except SwdFileBinaryError as e:
-        print("This file don't look like a SWD-file: %s" % file_swd)
-        sys.exit()
+    except SwdFileCantOpenError:
+        print(f"Not able to open: {file_swd}")
+        sys.exit(1)
+    except SwdFileBinaryError:
+        print(f"This SWD file don't have the correct binary convention: {file_swd}")
+        sys.exit(2)
+    except SwdFileBinaryError:
+        print(f"This file don't look like a SWD-file: {file_swd}")
+        sys.exit(3)
 
-    def write(tag):
-        print('%-8s %s' % (tag + ':', swd[tag]))
+    def write_swd_tag(tag):
+        print(f"{tag + ':':<8} {swd[tag]}")
 
-    write('version')
-    write('prog')
-    write('date')
-    write('fmt')
-    write('shp')
-    write('amp')
-    write('tmax')
-    write('dt')
-    write('nsteps')
-    write('nstrip')
-    write('order')
-    write('d')
+    write_swd_tag("version")
+    write_swd_tag("prog")
+    write_swd_tag("date")
+    write_swd_tag("fmt")
+    write_swd_tag("shp")
+    write_swd_tag("amp")
+    write_swd_tag("tmax")
+    write_swd_tag("dt")
+    write_swd_tag("nsteps")
+    write_swd_tag("nstrip")
+    write_swd_tag("order")
+    write_swd_tag("d")
 
-    shp = swd['shp']
+    shp = swd["shp"]
     if shp in [1, 2, 3]:
         # Long-crested seas
-        write('n')
+        write_swd_tag("n")
         if shp == 3:
-            write('nh')
-        write('sizex')
-        write('lmax')
-        write('lmin')
-        write('dk')
+            write_swd_tag("nh")
+        write_swd_tag("sizex")
+        write_swd_tag("lmax")
+        write_swd_tag("lmin")
+        write_swd_tag("dk")
 
     if shp in [4, 5]:
         # Short-crested seas
-        write('nx')
-        write('ny')
-        write('sizex')
-        write('sizey')
-        write('lmax')
-        write('lmin')
-        write('dkx')
-        write('dky')
+        write_swd_tag("nx")
+        write_swd_tag("ny")
+        write_swd_tag("sizex")
+        write_swd_tag("sizey")
+        write_swd_tag("lmax")
+        write_swd_tag("lmin")
+        write_swd_tag("dkx")
+        write_swd_tag("dky")
 
     if shp in [6]:
         # Airy waves
-        write('n')
+        write_swd_tag("n")
 
-    write('cid')
+    write_swd_tag("cid")
+
+
+if __name__ == "__main__":
+    main()

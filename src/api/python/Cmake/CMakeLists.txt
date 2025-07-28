@@ -11,7 +11,7 @@ set(CMAKE_BUILD_TYPE Release)
 
 set(DIR_SRC_API_F ../../fortran)
 set(DIR_SRC_API_C ../../c)
-set(DIR_SRC_API_PY ..)
+set(DIR_SRC_API_PY .)
 
 set(SRC_API_F
     ${DIR_SRC_API_F}/open_swd_file.F90

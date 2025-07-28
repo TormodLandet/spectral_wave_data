@@ -1,26 +1,21 @@
-# -*- coding: utf-8 -*-
-    
 """
-:platform: Linux, Windows, python 2.7 and 3.x
+:platform: Linux, Windows, Python 3.x
 :synopsis: Defines the Python-C interface
 
-Author  - Jens Bloch Helmers, DNVGL
+Author  - Jens Bloch Helmers, DNV
 Created - 2019-08-11
 """
 
-from __future__ import division
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-
-import platform, sys, os
+import sys
+import os
+import platform
 from ctypes import c_bool, c_double, c_int, c_char_p, c_void_p, Structure, CDLL
 
 assert sys.version_info >= (2, 7, 11)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-if platform.system()=='Windows':
-    intel_redist_path = os.getenv('INTEL_DEV_REDIST')
+if platform.system() == "Windows":
+    intel_redist_path = os.getenv("INTEL_DEV_REDIST")
     if intel_redist_path is None:
         msg = """
               To apply "spectral_wave_data" you need to install the latest version of:
@@ -32,14 +27,16 @@ if platform.system()=='Windows':
               """
         raise AssertionError(msg)
     if sys.version_info >= (3, 8):
-        intel_redist_path = os.path.join(intel_redist_path, 'redist', 'intel64', 'compiler')
+        intel_redist_path = os.path.join(
+            intel_redist_path, "redist", "intel64", "compiler"
+        )
         os.add_dll_directory(HERE)
         os.add_dll_directory(intel_redist_path)
-    swdlib = CDLL(str(os.path.join(HERE, 'SpectralWaveData.dll')))
-elif platform.system()=='Linux':
-    swdlib = CDLL(str(os.path.join(HERE, 'libSpectralWaveData.so')))
+    swdlib = CDLL(str(os.path.join(HERE, "SpectralWaveData.dll")))
+elif platform.system() == "Linux":
+    swdlib = CDLL(str(os.path.join(HERE, "libSpectralWaveData.so")))
 else:
-    raise AssertionError('Not supported platform: ' + platform.system())
+    raise AssertionError("Not supported platform: " + platform.system())
 
 """
 ================================================================================================
@@ -48,21 +45,40 @@ BEGIN interface definition to the C-implementation
 NOTE: STRANGE ERRORS may occur if this interface does not comply with the original C source code.
 """
 
+
 class vecswd(Structure):
-     _fields_ = [("x", c_double), ("y", c_double), ("z", c_double)]
+    _fields_ = [("x", c_double), ("y", c_double), ("z", c_double)]
 
 
 class vecphi2ndswd(Structure):
-    _fields_ = [("xx", c_double), ("xy", c_double), ("xz", c_double),
-                ("yy", c_double), ("yz", c_double), ("zz", c_double)]
+    _fields_ = [
+        ("xx", c_double),
+        ("xy", c_double),
+        ("xz", c_double),
+        ("yy", c_double),
+        ("yz", c_double),
+        ("zz", c_double),
+    ]
+
 
 class vecelev2ndswd(Structure):
     _fields_ = [("xx", c_double), ("xy", c_double), ("yy", c_double)]
 
-swdlib.swd_api_allocate.argtypes = [c_char_p, c_double, c_double,
-                                    c_double, c_double, c_double,
-                                    c_int, c_int, c_int, c_int,
-                                    c_int, c_bool]
+
+swdlib.swd_api_allocate.argtypes = [
+    c_char_p,
+    c_double,
+    c_double,
+    c_double,
+    c_double,
+    c_double,
+    c_int,
+    c_int,
+    c_int,
+    c_int,
+    c_int,
+    c_bool,
+]
 swdlib.swd_api_allocate.restype = c_void_p
 
 swdlib.swd_api_update_time.argtypes = [c_void_p, c_double]

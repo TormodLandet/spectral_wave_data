@@ -1,0 +1,15 @@
+*.whl
+*.mod
+*.so
+*.dll
+*.dylib
+dist
+build
+wheelhouse
+*.egg-info
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+uv.lock
+.venv

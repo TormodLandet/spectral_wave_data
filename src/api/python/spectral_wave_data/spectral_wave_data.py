@@ -1,25 +1,22 @@
-# -*- coding: utf-8 -*-
-    
 """
-:platform: Linux, Windows, python 2.7 and 3.x
+:platform: Linux, Windows, Python 3.x
 :synopsis: Python wrapper for the spectral_wave_data ocean wave model.
 
-Author  - Jens Bloch Helmers, DNVGL
+Author  - Jens Bloch Helmers, DNV
 Created - 2019-08-11
 """
 
-from __future__ import division
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
+__all__ = [
+    "SpectralWaveData",
+    "SwdError",
+    "SwdFileCantOpenError",
+    "SwdFileBinaryError",
+    "SwdFileDataError",
+    "SwdInputValueError",
+    "SwdAllocateError",
+]
 
-import os
-
-__all__ = ['SpectralWaveData', 'SwdError', 'SwdFileCantOpenError',
-           'SwdFileBinaryError', 'SwdFileDataError', 'SwdInputValueError',
-           'SwdAllocateError']
-
-from .swd_c_interface import swdlib, vecswd, vecphi2ndswd, vecelev2ndswd
+from .swd_c_interface import swdlib
 
 
 class SwdError(Exception):
@@ -70,8 +67,21 @@ class SpectralWaveData(object):
 
     """
 
-    def __init__(self, file_swd, x0, y0, t0, beta, rho=1025.0, nsumx=-1, 
-                 nsumy=-1, impl=0, ipol=0, norder=0, dc_bias=False):
+    def __init__(
+        self,
+        file_swd,
+        x0,
+        y0,
+        t0,
+        beta,
+        rho=1025.0,
+        nsumx=-1,
+        nsumy=-1,
+        impl=0,
+        ipol=0,
+        norder=0,
+        dc_bias=False,
+    ):
         """Constructor
 
         Parameters
@@ -132,8 +142,20 @@ class SpectralWaveData(object):
         >>> swd = SpectralWaveData('my_waves.swd', x0=0.0, y0=0.0, t0=0.0, beta=180.0)
 
         """
-        self.obj = swdlib.swd_api_allocate(file_swd.encode('ascii'), x0, y0, t0, beta,
-                                           rho, nsumx, nsumy, impl, ipol, norder, dc_bias)
+        self.obj = swdlib.swd_api_allocate(
+            file_swd.encode("ascii"),
+            x0,
+            y0,
+            t0,
+            beta,
+            rho,
+            nsumx,
+            nsumy,
+            impl,
+            ipol,
+            norder,
+            dc_bias,
+        )
         if swdlib.swd_api_error_raised(self.obj):
             id = swdlib.swd_api_error_get_id(self.obj)
             msg = swdlib.swd_api_error_get_msg(self.obj).decode()
@@ -186,7 +208,7 @@ class SpectralWaveData(object):
         if swdlib.swd_api_error_raised(self.obj):
             id = swdlib.swd_api_error_get_id(self.obj)
             msg = swdlib.swd_api_error_get_msg(self.obj).decode()
-            swdlib.swd_api_error_clear(self.obj) # To simplify safe recovery...
+            swdlib.swd_api_error_clear(self.obj)  # To simplify safe recovery...
             if id == 1003:
                 raise SwdFileDataError(msg)
             elif id == 1004:
@@ -304,7 +326,7 @@ class SpectralWaveData(object):
 
         """
         res = swdlib.swd_api_grad_phi(self.obj, x, y, z)
-        return res      # res.x, res.y, res.z
+        return res  # res.x, res.y, res.z
 
     def grad_phi_2nd(self, x, y, z):
         """Calculates the 2nd order derivatives of the wave potential.
@@ -338,7 +360,7 @@ class SpectralWaveData(object):
 
         """
         res = swdlib.swd_api_grad_phi_2nd(self.obj, x, y, z)
-        return res       # res.xx, res.xy, res.xz, res.yy, res.yz, res.zz
+        return res  # res.xx, res.xy, res.xz, res.yy, res.yz, res.zz
 
     def acc_euler(self, x, y, z):
         """Calculates the Euler acceleration (grad(phi_t)) at (x,y,z).
@@ -369,7 +391,7 @@ class SpectralWaveData(object):
 
         """
         res = swdlib.swd_api_acc_euler(self.obj, x, y, z)
-        return res      # res.x, res.y, res.z
+        return res  # res.x, res.y, res.z
 
     def acc_particle(self, x, y, z):
         """Calculates the particle acceleration at (x,y,z).
@@ -400,7 +422,7 @@ class SpectralWaveData(object):
 
         """
         res = swdlib.swd_api_acc_particle(self.obj, x, y, z)
-        return res      # res.x, res.y, res.z
+        return res  # res.x, res.y, res.z
 
     def elev(self, x, y):
         """Calculates the wave elevation at (x,y). It is
@@ -486,7 +508,7 @@ class SpectralWaveData(object):
 
         """
         res = swdlib.swd_api_grad_elev(self.obj, x, y)
-        return res      # res.x, res.y, res.z=0
+        return res  # res.x, res.y, res.z=0
 
     def grad_elev_2nd(self, x, y):
         """Calculates the 2nd order gradients of the wave elevations. The gradients
@@ -517,7 +539,7 @@ class SpectralWaveData(object):
 
         """
         res = swdlib.swd_api_grad_elev_2nd(self.obj, x, y)
-        return res       # res.xx, res.xy, res.yy
+        return res  # res.xx, res.xy, res.yy
 
     def bathymetry(self, x, y):
         """Calculates the vertical distance from z=0 to the sea floor at (x, y).
@@ -572,7 +594,7 @@ class SpectralWaveData(object):
 
         """
         res = swdlib.swd_api_bathymetry_nvec(self.obj, x, y)
-        return res    # res.x, res.y, res.z
+        return res  # res.x, res.y, res.z
 
     def pressure(self, x, y, z):
         """Calculates the complete nonlinear Bernoulli-pressure (Const=0).
@@ -630,11 +652,11 @@ class SpectralWaveData(object):
         >>> swd.convergence(x, y, z, 'convergence_data_at_xyz.csv')
 
         """
-        swdlib.swd_api_convergence(self.obj, x, y, z, csv.encode('ascii'))
+        swdlib.swd_api_convergence(self.obj, x, y, z, csv.encode("ascii"))
         if swdlib.swd_api_error_raised(self.obj):
             id = swdlib.swd_api_error_get_id(self.obj)
             msg = swdlib.swd_api_error_get_msg(self.obj).decode()
-            swdlib.swd_api_error_clear(self.obj) # To simplify safe recovery...
+            swdlib.swd_api_error_clear(self.obj)  # To simplify safe recovery...
             if id == 1001:
                 raise SwdFileCantOpenError(msg)
             else:
@@ -671,11 +693,11 @@ class SpectralWaveData(object):
         >>> swd.strip(tmin=850.0, tmax=950.0, file_swd='freak_wave_at_850_950.swd')
 
         """
-        swdlib.swd_api_strip(self.obj, tmin, tmax, file_swd.encode('ascii'))
+        swdlib.swd_api_strip(self.obj, tmin, tmax, file_swd.encode("ascii"))
         if swdlib.swd_api_error_raised(self.obj):
             id = swdlib.swd_api_error_get_id(self.obj)
             msg = swdlib.swd_api_error_get_msg(self.obj).decode()
-            swdlib.swd_api_error_clear(self.obj) # To simplify safe recovery...
+            swdlib.swd_api_error_clear(self.obj)  # To simplify safe recovery...
             if id == 1001:
                 raise SwdFileCantOpenError(msg)
             elif id == 1003:
@@ -740,15 +762,33 @@ class SpectralWaveData(object):
         >>> print("Applied SWD-class = ", swd.get('class'))
 
         """
-        key_c = key.encode('ascii')
+        key_c = key.encode("ascii")
 
-        if key in ['file', 'file_swd', 'version', 'class', 'cid', 'prog', 'date']:
+        if key in ["file", "file_swd", "version", "class", "cid", "prog", "date"]:
             res = swdlib.swd_api_get_chr(self.obj, key_c).decode()
-        elif key in ['magic', 'grav', 'lscale', 'dt', 'dk', 'dkx', 'dky',
-                      'd', 'depth', 'tmax', 'lmin', 'lmax', 
-                      'sizex', 'sizey', 't0', 'x0', 'y0', 'beta', 'rho']:
+        elif key in [
+            "magic",
+            "grav",
+            "lscale",
+            "dt",
+            "dk",
+            "dkx",
+            "dky",
+            "d",
+            "depth",
+            "tmax",
+            "lmin",
+            "lmax",
+            "sizex",
+            "sizey",
+            "t0",
+            "x0",
+            "y0",
+            "beta",
+            "rho",
+        ]:
             res = swdlib.swd_api_get_real(self.obj, key_c)
-        elif key in ['dc_bias']:
+        elif key in ["dc_bias"]:
             res = swdlib.swd_api_get_bool(self.obj, key_c)
         else:
             res = swdlib.swd_api_get_int(self.obj, key_c)
@@ -756,7 +796,7 @@ class SpectralWaveData(object):
         if swdlib.swd_api_error_raised(self.obj):
             id = swdlib.swd_api_error_get_id(self.obj)
             msg = swdlib.swd_api_error_get_msg(self.obj).decode()
-            swdlib.swd_api_error_clear(self.obj) # To simplify safe recovery...
+            swdlib.swd_api_error_clear(self.obj)  # To simplify safe recovery...
             if id == 1004:
                 raise SwdInputValueError(msg)
             else:

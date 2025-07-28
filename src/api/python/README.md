@@ -65,46 +65,50 @@ consistent exception handling.
 
 ## Usage
 
-Typical usage in a Python script or program::
+Typical usage in a Python script or program:
 
-    from spectral_wave_data import SpectralWaveData
-    
-    # x0/y0/t0/beta are parameters shifting the spatial and temporal reference frame
-    swd = SpectralWaveData(file_swd="my.swd", x0=0.0, y0=0.0, t0=0.0, beta=180.0)
+```python
+from spectral_wave_data import SpectralWaveData
 
-    swd.update_time(time=3.8143127)      # Maximum time can be obtained from: swd['tmax']
-    
-    zeta = swd.elev(x=5.3, y=12.4)
-    acc_e = swd.acc_euler(x=7.3, y=-3.4, z=-8.3)
-    acc_p = swd.acc_particle(x=7.3, y=-3.4, z=-8.3)
-    phi2 = swd.grad_phi_2nd(x=7.3, y=-3.4, z=-8.3)
-    
-    print("Surface elevation at (x, y) = ", zeta)
-    print("Euler (local) acceleration in x-direction at (x,y,z) = ", acc_e.x)
-    print("Particle acceleration in x-direction at (x,y,z) = ", acc_p.x)
-    print("d^2(potential)/dxdz at (x,y,z) = ", phi2.xz)
+# x0/y0/t0/beta are parameters shifting the spatial and temporal reference frame
+swd = SpectralWaveData(file_swd="my.swd", x0=0.0, y0=0.0, t0=0.0, beta=180.0)
+
+swd.update_time(time=3.8143127)      # Maximum time can be obtained from: swd['tmax']
+
+zeta = swd.elev(x=5.3, y=12.4)
+acc_e = swd.acc_euler(x=7.3, y=-3.4, z=-8.3)
+acc_p = swd.acc_particle(x=7.3, y=-3.4, z=-8.3)
+phi2 = swd.grad_phi_2nd(x=7.3, y=-3.4, z=-8.3)
+
+print("Surface elevation at (x, y) = ", zeta)
+print("Euler (local) acceleration in x-direction at (x,y,z) = ", acc_e.x)
+print("Particle acceleration in x-direction at (x,y,z) = ", acc_p.x)
+print("d^2(potential)/dxdz at (x,y,z) = ", phi2.xz)
+```
 
 Meta data from an actual SWD file can be extracted using the console script swd_meta::
 
-    >>> swd_meta my.swd
-    version: 1.0.0
-    prog:    raschii-1.0.3
-    date:    2020:01:22 19:57:55
-    fmt:     100
-    shp:     2
-    amp:     1
-    tmax:    6.3000000938773155
-    dt:      0.10000000149011612
-    nsteps:  64
-    nstrip:  0
-    order:   -1
-    d:       32.0
-    n:       50
-    sizex:   220.00000561733003
-    lmax:    220.00000561733003
-    lmin:    4.400000112346601
-    dk:      0.028559932485222816
-    cid:     {'model': 'Fenton', 'T': 12.792885811907514, 'height': 18.5, ...}
+```console
+> swd_meta my.swd
+version: 1.0.0
+prog:    raschii-1.0.3
+date:    2020:01:22 19:57:55
+fmt:     100
+shp:     2
+amp:     1
+tmax:    6.3000000938773155
+dt:      0.10000000149011612
+nsteps:  64
+nstrip:  0
+order:   -1
+d:       32.0
+n:       50
+sizex:   220.00000561733003
+lmax:    220.00000561733003
+lmin:    4.400000112346601
+dk:      0.028559932485222816
+cid:     {'model': 'Fenton', 'T': 12.792885811907514, 'height': 18.5, ...}
+```
 
 Output and further examples are explained in the 
 [online documentation](https://spectral-wave-data.readthedocs.io/).
@@ -134,6 +138,7 @@ Due to the complexity of building from source we refer to the
 [documentation](https://spectral-wave-data.readthedocs.io/) and
 the [spectral_wave_data](https://github.com/SpectralWaveData/spectral_wave_data)
 GitHub repository for related instructions and download of the source code.
+See specifically the `INSTALL.md` file in the `src/api/python` directory.
 
 
 ### Installation problems?
