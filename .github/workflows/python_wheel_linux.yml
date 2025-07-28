@@ -4,13 +4,10 @@ on: [push, pull_request]
 
 jobs:
   build_wheels:
-    name: Build wheels on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        # Ubuntu 20.04 is the oldest Ubuntu LTS with GCC >= 9
-        os: [ubuntu-20.04]
-  
+    name: Build oldest supported manylinux wheel
+    runs-on: ubuntu-latest
+    container: quay.io/pypa/manylinux2014_x86_64
+    
     steps:
       - uses: actions/checkout@v4
 
