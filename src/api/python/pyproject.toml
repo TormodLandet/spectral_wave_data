@@ -70,3 +70,8 @@ path = "hatch_build.py"
 # Include the custom plugin to bundle the *.dll/*.so library
 [tool.hatch.build.hooks.custom]
 path = "hatch_build.py"
+
+[tool.uv]
+# These groups are included by uv by default (for developers)
+# You can use uv overrides --no-group=test or --only-group=build etc
+default-groups = ["test", "docs", "build"]
