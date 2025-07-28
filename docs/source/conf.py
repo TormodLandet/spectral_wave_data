@@ -27,7 +27,7 @@ from version_definition import version_core as version, version_full as release
 # -- Project information -----------------------------------------------------
 
 project = u'spectral-wave-data'
-copyright = u'2019-2020, DNVGL'
+copyright = u'2019-2021, DNV'
 author = u'Jens B. Helmers'
 
 # The short X.Y version
@@ -90,7 +90,7 @@ shutil.copytree(os.path.join(dir_1, 'tools'), os.path.join(dir_2, 'tools'))
 sys.path.insert(0, os.path.abspath('autodoc_mocks'))  # for autodoc to find spectral_wave_data
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['my_templates']
+#templates_path = ['my_templates']
 
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:

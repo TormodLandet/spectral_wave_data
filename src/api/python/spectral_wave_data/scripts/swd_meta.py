@@ -21,7 +21,7 @@ def main():
     file_swd = args.file_swd
 
     try:
-        swd = SpectralWaveData(file_swd, x0=0.0, y0=0.0, t0=0.0, beta=0.0)
+        swd = SpectralWaveData(file_swd)
     except SwdFileCantOpenError:
         print(f"Not able to open: {file_swd}")
         sys.exit(1)

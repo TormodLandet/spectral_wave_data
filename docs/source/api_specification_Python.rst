@@ -7,9 +7,9 @@ The Python package **spectral_wave_data** contains a module
 It defines the generic class :class:`SpectralWaveData`
 to be applied in applications based on Python-2 or Python-3.
 
------------------------
-Constructor and methods
------------------------
+---------------------
+The API specification
+---------------------
 
 Detailed documentation of class members is provided :doc:`here <api_specification_Python_methods>`.
 
@@ -18,6 +18,56 @@ Detailed documentation of class members is provided :doc:`here <api_specificatio
    :caption: autdoc_python
 
    api_specification_Python_methods
+
+----------------
+Releasing memory
+----------------
+
+In the Python implementation there are three different ways to release memory when the swd object is
+not needed anymore.
+
+^^^^^^^^^^^^^^^^
+The close method
+^^^^^^^^^^^^^^^^
+
+An explicit call to the :meth:`~spectral_wave_data.SpectralWaveData.close` method will destroy the
+internal structure of the object and free related memory. Other references to the object will also
+be useless.
+
+>>> swd = SpectralWaveData('my_waves.swd')
+>>> ...
+>>> swd2 = swd
+>>> swd.close()    # Also swd2 will now be useless
+
+Any usage of a closed object will throw an :exc:`AttributeError` exception.
+Subsequent calls to :meth:`~spectral_wave_data.SpectralWaveData.close` on the same object have no effects.
+
+^^^^^^^^^^^^^^^^^^^^^^^^^
+Python garbage collection
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The Python garbage collection mechanism is fully supported. If an object goes out of scope and there
+are no more reference counts, Python may silently :meth:`~spectral_wave_data.SpectralWaveData.close` the object.
+The Python :attr:`del` statement is supported.
+
+>>> swd = SpectralWaveData('my_waves.swd')
+>>> ...
+>>> swd2 = swd
+>>> del swd   # The ref. count is not 0. Hence the underlying structure is not deallocated
+>>> del swd2  # No more ref. counts. The memory is automatically released
+
+^^^^^^^^^^^^^^^^^^
+The with statement
+^^^^^^^^^^^^^^^^^^
+
+The Python :attr:`with` statement is supported. Consequently, the object is automatically closed when
+the :attr:`with` block is completed, or if something goes wrong inside the :attr:`with` block.
+
+>>> with SpectralWaveData('my_waves.swd') as swd:
+>>> ...  swd.update_time(t=0.0)
+>>> ...  zeta = swd.elev(x=0.0, y=0.0)
+>>> print("The swd object is now closed. Related memory is released...")
+
 
 ------------------
 Exception handling
@@ -39,8 +89,11 @@ imported and applied in application programs and scripts.
 If no try/except block is applied, the application program will abort and
 print the exception and backtrace as a normal Python crash.
 
-The only other associated class methods that may throw exceptions are :meth:`update_time`,
-:meth:`convergence`, :meth:`strip` and :meth:`get`.
+The only other associated class methods that may throw exceptions are
+:meth:`~spectral_wave_data.SpectralWaveData.update_time`,
+:meth:`~spectral_wave_data.SpectralWaveData.convergence`,
+:meth:`~spectral_wave_data.SpectralWaveData.strip` and
+:meth:`~spectral_wave_data.SpectralWaveData.get`.
 
 .. list-table::
    :widths: 25 75
@@ -105,31 +158,33 @@ for the actual SWD class.
 The script swd_meta
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-For convenience this Python wheel package includes the script :file:`swd_meta`
+For convenience the Python distribution includes the script :file:`swd_meta`
 listing the relevant metadata for a given SWD-file. It runs on Windows and Linux.
 
 In a terminal window with access to your installed **spectral_wave_data** package you can
-invoke it like in this example where :file:`my.swd` is the name of the actual SWD-file:
+invoke it like in this example where :file:`my.swd` is the name of the actual SWD-file.
 
->>> swd_meta my.swd
-version: 1.0.0-beta.9
-prog:    raschii-1.0.3.dev0
-date:    2020:01:22 19:57:55
-fmt:     100
-shp:     2
-amp:     1
-tmax:    6.3000000938773155
-dt:      0.10000000149011612
-nsteps:  64
-nstrip:  0
-order:   -1
-depth:   32.0
-n:       50
-sizex:   220.00000561733003
-lmax:    220.00000561733003
-lmin:    4.400000112346601
-dk:      0.028559932485222816
-cid:     {'model': 'Fenton', 'T': 12.792885811907514, 'height': 18.5, 'depth': 32.0, 'N': 50, 'air': 'NoneType', 'g': 9.81, 'c': 17.19705805512825, 'relax': 0.5}
+.. code-block:: console
+
+   > swd_meta my.swd
+   version: 1.0.0
+   prog:    raschii-1.0.4
+   date:    2020:10:22 18:37:55
+   fmt:     100
+   shp:     2
+   amp:     1
+   tmax:    6.3000000938773155
+   dt:      0.10000000149011612
+   nsteps:  64
+   nstrip:  0
+   order:   -1
+   d:       32.0
+   n:       50
+   sizex:   220.00000561733003
+   lmax:    220.00000561733003
+   lmin:    4.400000112346601
+   dk:      0.028559932485222816
+   cid:     {'model': 'Fenton', 'T': 12.792885811907514, 'height': 18.5, 'depth': 32.0, 'N': 50, 'air': 'NoneType', 'g': 9.81, 'c': 17.19705805512825, 'relax': 0.5}
 
 
 --------------

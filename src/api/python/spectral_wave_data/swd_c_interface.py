@@ -1,6 +1,6 @@
 """
 :platform: Linux, Windows, Python 3.x
-:synopsis: Defines the Python-C interface
+:synopsis: Defines the Python-C interface of spectral_wave_data
 
 Author  - Jens Bloch Helmers, DNV
 Created - 2019-08-11
@@ -38,25 +38,28 @@ def find_library(library_name: str) -> Path:
 
 
 if sys.platform.startswith("win"):
-    intel_redist_path = os.getenv("INTEL_DEV_REDIST")
-    if intel_redist_path is None:
-        msg = """
-              To apply "spectral_wave_data" you need to install the latest version of:
-              1) Redistributable Libraries for Intel® C++ and Fortran Compilers for Windows
-                 This package can be downloaded for free from intel.com
-              2) You also need Microsoft Visual C++ redistributables or
-                 Visual Studio with C++ tools and libraries.
-                 These tools can be downloaded from microsoft.com
-              """
-        raise AssertionError(msg)
+    # The Intel Redistributable Libraries are expected to be statical linked to the dll.
+    # Consequently, we skip this:
+    #  intel_redist_path = os.getenv("INTEL_DEV_REDIST")
+    #  if intel_redist_path is None:
+    #      msg = """
+    #            To apply "spectral_wave_data" you need to install the latest version of:
+    #            1) Redistributable Libraries for Intel® C++ and Fortran Compilers for Windows
+    #               This package can be downloaded for free from intel.com
+    #            2) You also need Microsoft Visual C++ redistributables or
+    #               Visual Studio with C++ tools and libraries.
+    #               These tools can be downloaded from microsoft.com
+    #            """
+    #      raise AssertionError(msg)
     swdlib_path = find_library("SpectralWaveData.dll")
 
     if sys.version_info >= (3, 8):
-        intel_redist_path = os.path.join(
-            intel_redist_path, "redist", "intel64", "compiler"
-        )
+        # intel_redist_path = os.path.join(
+        #     intel_redist_path, "redist", "intel64", "compiler"
+        # )
+        # os.add_dll_directory(intel_redist_path)
         os.add_dll_directory(str(swdlib_path.parent))
-        os.add_dll_directory(intel_redist_path)
+        
 
 elif sys.platform.startswith("linux"):
     swdlib_path = find_library("libSpectralWaveData.so")
@@ -86,6 +89,7 @@ class vecphi2ndswd(Structure):
         ("yz", c_double),
         ("zz", c_double),
     ]
+
 
 
 class vecelev2ndswd(Structure):

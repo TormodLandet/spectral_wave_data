@@ -4,7 +4,7 @@
 :platform: Linux, Windows, python 3.x
 :synopsis: Define version number of spectral-wave-data.
 
-Author  - Jens Bloch Helmers, DNVGL
+Author  - Jens Bloch Helmers, DNV
 Created - 2020-01-24
 """
 
@@ -19,7 +19,7 @@ import re
 tag_major = 1          # int  (Only increment if incompatibilities are introduced)
 tag_minor = 0          # int  (Increment if new features are introduced. 100% backward compatibility)
 tag_patch = 0          # int  (Increment if bug fix, improved documentation etc. No new features)
-tag_prerel = 'rc1'     # E.g. 'beta.1', 'beta.1.debug.10', 'rc1'
+tag_prerel = 'rc3'     # E.g. 'beta.1', 'beta.1.debug.10', 'rc1'
 tag_build = ''         # E.g. 'VendorX', branch and/or signature. (dot as separation)
 # No need to edit below unless you really have to do it...
 #=====================================================================================================

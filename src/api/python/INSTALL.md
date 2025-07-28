@@ -90,6 +90,10 @@ downloaded from Intel and Microsoft:
 * https://software.intel.com/en-us/articles/intel-compilers-redistributable-libraries-by-version
 * https://www.microsoft.com/en-us/download/details.aspx?id=52685
 
+It is recommended to build the Fortran library SpectralWaveData.dll using the /MT
+Intel compiler flag. Then all required Intel routines will be included in the above dll
+and the Python whl file.
+
 ### Linux
 
 You may need to use the `auditwheel` tool to make the newly created Wheel

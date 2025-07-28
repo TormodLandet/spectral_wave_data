@@ -73,7 +73,7 @@ class SpectralWaveData(object):
         x0,
         y0,
         t0,
-        beta,
+        beta=0.0,
         rho=1025.0,
         nsumx=-1,
         nsumy=-1,
@@ -88,12 +88,12 @@ class SpectralWaveData(object):
         ----------
         file_swd : str
             The name of the swd file defining the ocean waves.
-        x0, y0 : float
+        x0, y0 : float, optional
             The origin of the application wave coordinate system relative to the
             SWD coordinate system. [m]
-        t0 : float
+        t0 : float, optional
             The SWD time corresponding to t=0 in the application simulation. [s]
-        beta : float
+        beta : float, optional
             Rotation of the SWD x-axis relative to the application x-axis. [deg]
         rho : float, optional
             Density of water. [kg/m^3] (Only relevant for pressure calculations)
@@ -142,6 +142,12 @@ class SpectralWaveData(object):
         >>> swd = SpectralWaveData('my_waves.swd', x0=0.0, y0=0.0, t0=0.0, beta=180.0)
 
         """
+        if isinstance(file_swd, (str, bytes)):
+            file_swd = file_swd.encode("ascii")
+        else:
+            msg = f"file_swd should be of type str or bytes. type(file_swd)={type(file_swd)}"
+            raise SwdInputValueError(msg)
+
         self.obj = swdlib.swd_api_allocate(
             file_swd.encode("ascii"),
             x0,
@@ -171,7 +177,27 @@ class SpectralWaveData(object):
                 raise SwdAllocateError(msg)
             else:
                 raise SwdError(msg)
-        self._alive = True
+
+    def __enter__(self):
+        """Allow with statement.
+
+        Examples
+        --------
+        >>> with SpectralWaveData("my.swd") as swd:
+        ...     swd.update_time(0.0)
+        ...     swd.elev(0.0, 0.0)
+        >>> print("swd object is closed!")
+
+        """
+        return self
+
+    def __exit__(self, exception_type, exception_value, exception_traceback):
+        """Safe exit from with statement. Exceptions are raised if relevant"""
+        self.close()
+
+    def __del__(self):
+        """Called by the Python garbage collection when needed"""
+        self.close()
 
     def update_time(self, time):
         """Set the current time for all kinematic calculations.
@@ -820,6 +846,10 @@ class SpectralWaveData(object):
         None
 
         """
-        if self._alive is True:
+        if hasattr(self, "obj"):
             swdlib.swd_api_close(self.obj)
-            self._alive = False
+            delattr(self, "obj")
+            # From now on the swdlib.swd_api_XXX methods will never be called because
+            # the argument self.obj does not exist. Consequently, e.g. swd.elev(...)
+            # will raise an AttributeError if such a method is called after swd.close().
+            # Hence, Illegal fatal memory access is avoided. Like OSError.
