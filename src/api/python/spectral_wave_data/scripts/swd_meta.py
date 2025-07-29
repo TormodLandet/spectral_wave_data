@@ -5,6 +5,9 @@ from spectral_wave_data import (
     SpectralWaveData,
     SwdFileCantOpenError,
     SwdFileBinaryError,
+    SwdFileDataError,
+    SwdInputValueError,
+    version_full,
 )
 
 
@@ -13,28 +16,50 @@ def main():
     Show the metadata from an SWD file
     """
     # Parse command line arguments
-    parser = argparse.ArgumentParser(
-        prog="swd_meta", description="Display metadata for SWD files"
-    )
-    parser.add_argument("file_swd", help="SWD file to analyze")
+    parser = argparse.ArgumentParser(prog="swd_meta", description="Display metadata for SWD files")
+    parser.add_argument("file_swd", nargs="*", help="SWD file to analyze")
+    parser.add_argument("--version", action="store_true", help="Show version and exit")
     args = parser.parse_args()
-    file_swd = args.file_swd
 
+    if args.version:
+        print(version_full)
+        return
+
+    if not args.file_swd:
+        print("ERROR: No SWD file provided. Please specify a file.")
+        parser.print_usage()
+        sys.exit(1)
+
+    for file_swd in args.file_swd:
+        swd_meta_main(file_swd)
+
+
+def swd_meta_main(file_swd):
+    """
+    Process a single SWD file and print its metadata
+    """
     try:
         swd = SpectralWaveData(file_swd)
-    except SwdFileCantOpenError:
-        print(f"Not able to open: {file_swd}")
+    except SwdFileCantOpenError as e:
+        print(f"Not able to open SWD file ({e}): {file_swd}")
         sys.exit(1)
-    except SwdFileBinaryError:
-        print(f"This SWD file don't have the correct binary convention: {file_swd}")
+    except SwdFileBinaryError as e:
+        print(f"This file does not have the correct binary convention ({e}): {file_swd}")
         sys.exit(2)
-    except SwdFileBinaryError:
-        print(f"This file don't look like a SWD-file: {file_swd}")
+    except SwdFileDataError as e:
+        print(f"This file does not look like a SWD-file ({e}): {file_swd}")
+        sys.exit(3)
+    except SwdInputValueError as e:
+        print(f"This file does not accept current input values ({e}): {file_swd}")
+        sys.exit(3)
+    except Exception as e:
+        print(f"This file has unexpected error ({e}): {file_swd}")
         sys.exit(3)
 
     def write_swd_tag(tag):
         print(f"{tag + ':':<8} {swd[tag]}")
 
+    print(f"Metadata for SWD file: {file_swd}\n{'=' * 40}\n")
     write_swd_tag("version")
     write_swd_tag("prog")
     write_swd_tag("date")
