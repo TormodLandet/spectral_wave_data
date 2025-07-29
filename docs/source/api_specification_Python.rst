@@ -39,7 +39,7 @@ be useless.
 >>> swd2 = swd
 >>> swd.close()    # Also swd2 will now be useless
 
-Any usage of a closed object will throw an :exc:`AttributeError` exception.
+Any usage of a closed object will throw an :exc:`SwdIsClosedError` exception.
 Subsequent calls to :meth:`~spectral_wave_data.SpectralWaveData.close` on the same object have no effects.
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^

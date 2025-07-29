@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from spectral_wave_data import SpectralWaveData
+from spectral_wave_data import SpectralWaveData, SwdIsClosedError
 from spectral_wave_data.tools import airy
 
 
@@ -42,7 +42,7 @@ def test_close_update_time(make_swd):
     zeta = swd.elev(x, y)
     swd.close()
     t *= 2
-    with pytest.raises(AttributeError):
+    with pytest.raises(SwdIsClosedError):
         swd.update_time(t)
 
 
@@ -55,7 +55,7 @@ def test_close_elev(make_swd):
     swd.update_time(t)
     zeta = swd.elev(x, y)
     swd.close()
-    with pytest.raises(AttributeError):
+    with pytest.raises(SwdIsClosedError):
         zeta_2 = swd.elev(x, y)
 
 
@@ -76,6 +76,6 @@ def test_garbage_collection(make_swd):
     zeta3 = swd2.elev(x, y)
     assert zeta3 == pytest.approx(zeta)
     swd2.close()
-    with pytest.raises(AttributeError):
+    with pytest.raises(SwdIsClosedError):
         zeta4 = swd2.elev(x, y)
 

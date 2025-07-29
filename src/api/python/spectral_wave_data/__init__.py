@@ -15,4 +15,5 @@ from .spectral_wave_data import (
     SwdFileDataError,
     SwdInputValueError,
     SwdAllocateError,
+    SwdIsClosedError,
 )

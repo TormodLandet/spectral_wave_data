@@ -51,16 +51,11 @@ def test_with_3(make_swd):
     with SpectralWaveData(file_swd) as swd:
         beta = swd["beta"]
         with pytest.raises(SwdError):
-            x = swd["asfasdf"]
+def test_with_4(make_swd):
+    file_swd = make_swd
+    with SpectralWaveData(file_swd) as swd:
+        beta = swd["beta"]
 
-
-# This test works! However:
-# pytest has some general issues with OSError. Just ignore the clutter screen dump in output....
-#def test_with_4(make_swd):
-#    file_swd = make_swd
-#    with SpectralWaveData(file_swd) as swd:
-#        beta = swd["beta"]
-#
-#    # SWD object should be closed by now...
-#    with pytest.raises(OSError):
-#        x0 = swd["x0"]
+    # SWD object should be closed by now...
+    with pytest.raises(SwdError):
+        x0 = swd["x0"]
