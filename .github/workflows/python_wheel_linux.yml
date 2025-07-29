@@ -49,16 +49,21 @@ jobs:
       - name: Install the wheel and run some quick unit tests
         run: |
           cd tests/python
-          uv venv .venv
 
-          uv pip install --python .venv/bin/python \
-            numpy sympy pytest ../../src/api/python/wheelhouse/spectral_wave_data*.whl
+          # Create a virtual environment with the oldest supported Python version
+          uv venv .venv --clear --no-project --seed --python 3.10
+          source .venv/bin/activate
 
+          # Install the test dependencies and then the newly built manylinux wheel
+          pip install -r requirements_tests.txt
+          pip install ../../src/api/python/wheelhouse/spectral_wave_data*manylinux*.whl
+
+          # Run a subset of the tests to verify that the wheel is functional
           export SWD_TEST_TYPE=quick
-          .venv/bin/python -m pytest -k shape2 -v
+          python -m pytest -k shape2 -v
 
       - name: Upload Python wheels
         uses: actions/upload-artifact@v4
         with:
-          name: python-wheels-manylinux
+          name: python-wheel-manylinux
           path: src/api/python/wheelhouse
