@@ -152,6 +152,9 @@ class SpectralWaveData:
         >>> swd = SpectralWaveData('my_waves.swd', x0=0.0, y0=0.0, t0=0.0, beta=180.0)
 
         """
+        # Before allocation of SWD object
+        self._ctypes_object = None
+
         if isinstance(file_swd, bytes):
             # Pre-encoded bytes, suitable for file system access in Fortran
             path_in_bytes = file_swd
@@ -164,6 +167,7 @@ class SpectralWaveData:
                 f"ERROR: file_swd should be of type str, Path, or bytes. Got {type(file_swd)}"
             )
 
+        # Allocate the SWD object
         self._ctypes_object = swdlib.swd_api_allocate(
             path_in_bytes,
             x0,
