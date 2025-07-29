@@ -1,20 +1,12 @@
-from __future__ import division
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-
-import sys
-import subprocess
-
-import sympy as sp
 import numpy as np
-
-from spectral_wave_data.tools import airy
-
+import sympy as sp
 from symbols import x, y, z, t
 
-class Shape6:
+from spectral_wave_data.tools import airy
+from test_utils import run_swd_meta_check
 
+
+class Shape6:
     def __init__(self, amps, dirs, phases, kwaves, depth, order, grav, sys):
         assert order < 3
         assert len(amps) == len(dirs) == len(phases) == len(kwaves)
@@ -234,14 +226,4 @@ class Shape6:
                        depth=self.depth, grav=self.grav, is_deg_dirs=False, is_deg_phases=False)
 
     def check_swd_meta(self, file_swd, n):
-        if sys.version_info >= (3, 5):
-            result = subprocess.run(["swd_meta", file_swd], capture_output=True)
-            assert result.returncode == 0
-            text = str(result.stdout)
-
-            def check(tag, val):
-                text_ok = "%-8s %s" % (tag + ':', val)
-                assert text_ok in text, ("missing: %s" % text_ok)
-
-            check("shp", 6)
-            check("n", n)
+        run_swd_meta_check(file_swd, shp=6, n=n)

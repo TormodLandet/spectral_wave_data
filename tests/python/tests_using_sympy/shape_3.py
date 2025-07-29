@@ -1,17 +1,10 @@
-from __future__ import division
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-
 import os
-import sys
-import subprocess
 from struct import pack
 
 import sympy as sp
-import numpy as np
-
 from symbols import x, y, z, t
+
+from test_utils import run_swd_meta_check
 
 
 class Shape3:
@@ -436,16 +429,7 @@ class Shape3:
         out.close()
 
     def check_swd_meta(self, file_swd, shp, n, nh):
-        if sys.version_info >= (3, 5):
-            result = subprocess.run(["swd_meta", file_swd], capture_output=True)
-            assert result.returncode == 0
-            text = str(result.stdout)
-
-            def check(tag, val):
-                text_ok = "%-8s %s" % (tag + ':', val)
-                assert text_ok in text, ("missing: %s" % text_ok)
-
-            check("shp", shp)
-            check("n", n)
-            if shp == 3:
-                check("nh", nh)
+        if shp == 3:
+            run_swd_meta_check(file_swd, shp=shp, n=n, nh=nh)
+        else:
+            run_swd_meta_check(file_swd, shp=shp, n=n)

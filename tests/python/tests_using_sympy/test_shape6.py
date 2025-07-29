@@ -11,10 +11,11 @@ import numpy as np
 
 import shape_6
 import corsys
-import tfun
 
 from spectral_wave_data import SpectralWaveData
 from spectral_wave_data.tools import airy
+from test_utils import should_run_quick_tests
+
 
 assert sys.version_info > (3, 4)
 
@@ -110,10 +111,9 @@ ts = [0.0, 15.2]         # application time
 
 def test_waves(make_waves):
     swd_anal, swd_num = make_waves
-    quick_check = os.environ.get("SWD_TEST_TYPE", "normal") == "quick"
+    quick_check = should_run_quick_tests()
 
     for t in ts:
-
         swd_num.update_time(t)
 
         for x in xs:

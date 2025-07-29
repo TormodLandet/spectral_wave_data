@@ -7,7 +7,6 @@ import os
 import shutil
 import math
 
-import numpy as np
 import pytest
 
 import shape_4
@@ -15,6 +14,8 @@ import corsys
 import tfun
 
 from spectral_wave_data import SpectralWaveData
+from test_utils import should_run_quick_tests
+
 
 assert sys.version_info > (3, 4)
 
@@ -108,7 +109,7 @@ ts = [0.2, 0.23, 0.52]   # application time: First exact on 2dt, Then < dt, then
 
 def test_waves(make_waves):
     swd_anal, swd_nums = make_waves
-    quick_check = os.environ.get("SWD_TEST_TYPE", "normal") == "quick"
+    quick_check = should_run_quick_tests()
 
     nx = swd_anal.nx
     ny = swd_anal.ny
