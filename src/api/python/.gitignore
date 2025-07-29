@@ -13,3 +13,4 @@ __pycache__
 *.pyd
 uv.lock
 .venv
+version.py
