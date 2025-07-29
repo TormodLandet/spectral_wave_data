@@ -5,7 +5,12 @@
 Author  - Jens Bloch Helmers, DNV
 Created - 2019-08-11
 """
+import os
+from typing import Union
 from pathlib import Path
+
+from .swd_c_interface import swdlib
+
 
 __all__ = [
     "SpectralWaveData",
@@ -16,8 +21,6 @@ __all__ = [
     "SwdInputValueError",
     "SwdAllocateError",
 ]
-
-from .swd_c_interface import swdlib
 
 
 class SwdError(Exception):
@@ -44,7 +47,7 @@ class SwdAllocateError(SwdError):
     pass
 
 
-class SpectralWaveData(object):
+class SpectralWaveData:
     """An object of SpectraWaveData is an instance of the SWD ocean wave model.
 
     Raises
@@ -70,24 +73,24 @@ class SpectralWaveData(object):
 
     def __init__(
         self,
-        file_swd,
-        x0,
-        y0,
-        t0,
-        beta=0.0,
-        rho=1025.0,
-        nsumx=-1,
-        nsumy=-1,
-        impl=0,
-        ipol=0,
-        norder=0,
-        dc_bias=False,
+        file_swd: Union[str, bytes, Path],
+        x0: float = 0.0,
+        y0: float = 0.0,
+        t0: float = 0.0,
+        beta: float = 0.0,
+        rho: float = 1025.0,
+        nsumx: int = -1,
+        nsumy: int = -1,
+        impl: int = 0,
+        ipol: int = 0,
+        norder: int = 0,
+        dc_bias: bool = False,
     ):
         """Constructor
 
         Parameters
         ----------
-        file_swd : str
+        file_swd : str, pathlib.Path, or UTF-8 encoded bytes
             The name of the swd file defining the ocean waves.
         x0, y0 : float, optional
             The origin of the application wave coordinate system relative to the
@@ -144,15 +147,19 @@ class SpectralWaveData(object):
 
         """
         if isinstance(file_swd, bytes):
-            file_swd = file_swd.decode("ascii")
-        elif isinstance(file_swd, Path):
-            file_swd = str(file_swd)
-        elif not isinstance(file_swd, str):
-            msg = f"file_swd should be of type str or bytes. type(file_swd)={type(file_swd)}"
-            raise SwdInputValueError(msg)
+            # Pre-encoded bytes, suitable for file system access in Fortran
+            path_in_bytes = file_swd
+        elif isinstance(file_swd, (str, Path)):
+            # Convert path-as-string to bytes using the file system's filename encoding
+            # Should end up with something suitable for file system access in Fortran 
+            path_in_bytes = os.fsencode(str(file_swd))
+        else:
+            raise SwdInputValueError(
+                f"ERROR: file_swd should be of type str, Path, or bytes. Got {type(file_swd)}"
+            )
 
         self.obj = swdlib.swd_api_allocate(
-            file_swd.encode("ascii"),
+            path_in_bytes,
             x0,
             y0,
             t0,
