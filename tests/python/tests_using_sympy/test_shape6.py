@@ -109,6 +109,7 @@ ys = [0.0, -5.2]         # application y-positions for evaluation
 zs = [0.0, -2.3, 3.7]    # application z-positions for evaluation
 ts = [0.0, 15.2]         # application time
 
+@pytest.mark.skipif(should_run_quick_tests(), reason="Skip shape 6 in quick checks")
 def test_waves(make_waves):
     swd_anal, swd_num = make_waves
     quick_check = should_run_quick_tests()

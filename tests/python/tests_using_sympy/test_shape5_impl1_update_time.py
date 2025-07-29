@@ -14,6 +14,8 @@ import corsys
 import tfun
 
 from spectral_wave_data import SpectralWaveData, SwdFileDataError, SwdInputValueError
+from test_utils import should_run_quick_tests
+
 
 assert sys.version_info > (3, 4)
 
@@ -99,6 +101,7 @@ def make_waves(request, tmp_path_factory):
     swd_num_fail.close()
 
 
+@pytest.mark.skipif(should_run_quick_tests(), reason="Skip shape 5 in quick checks")
 def test_waves(make_waves):
     swd_anal, swd_num, swd_num_fail = make_waves
 
