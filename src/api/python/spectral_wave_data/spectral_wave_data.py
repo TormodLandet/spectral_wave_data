@@ -5,6 +5,7 @@
 Author  - Jens Bloch Helmers, DNV
 Created - 2019-08-11
 """
+from pathlib import Path
 
 __all__ = [
     "SpectralWaveData",
@@ -142,9 +143,11 @@ class SpectralWaveData(object):
         >>> swd = SpectralWaveData('my_waves.swd', x0=0.0, y0=0.0, t0=0.0, beta=180.0)
 
         """
-        if isinstance(file_swd, (str, bytes)):
-            file_swd = file_swd.encode("ascii")
-        else:
+        if isinstance(file_swd, bytes):
+            file_swd = file_swd.decode("ascii")
+        elif isinstance(file_swd, Path):
+            file_swd = str(file_swd)
+        elif not isinstance(file_swd, str):
             msg = f"file_swd should be of type str or bytes. type(file_swd)={type(file_swd)}"
             raise SwdInputValueError(msg)
 
@@ -678,7 +681,7 @@ class SpectralWaveData(object):
         >>> swd.convergence(x, y, z, 'convergence_data_at_xyz.csv')
 
         """
-        swdlib.swd_api_convergence(self.obj, x, y, z, csv.encode("ascii"))
+        swdlib.swd_api_convergence(self.obj, x, y, z, str(csv).encode("ascii"))
         if swdlib.swd_api_error_raised(self.obj):
             id = swdlib.swd_api_error_get_id(self.obj)
             msg = swdlib.swd_api_error_get_msg(self.obj).decode()
@@ -719,7 +722,7 @@ class SpectralWaveData(object):
         >>> swd.strip(tmin=850.0, tmax=950.0, file_swd='freak_wave_at_850_950.swd')
 
         """
-        swdlib.swd_api_strip(self.obj, tmin, tmax, file_swd.encode("ascii"))
+        swdlib.swd_api_strip(self.obj, tmin, tmax, str(file_swd).encode("ascii"))
         if swdlib.swd_api_error_raised(self.obj):
             id = swdlib.swd_api_error_get_id(self.obj)
             msg = swdlib.swd_api_error_get_msg(self.obj).decode()
