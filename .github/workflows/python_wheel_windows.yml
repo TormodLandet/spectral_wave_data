@@ -1,0 +1,122 @@
+name: "Build Python Wheel on Windows"
+
+on: [push, pull_request]
+
+env:
+  oneAPI_download: "b00ef14b-e999-414f-8649-cf5ac754eafc/intel-fortran-essentials-2025.2.0.510_offline.exe"
+  python_version_build: "3.13"
+  python_version_test: "3.10"
+
+jobs:
+  build_wheels:
+    name: Build Windows Wheel using Intel oneAPI Fortran Compiler (ifort)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache downloaded oneAPI Fortran Compiler installer
+        id: cache-downloads
+        uses: actions/cache@v4
+        with:
+          path: C:\downloads-cache\intel-fortran-installer.exe
+          key: ${{ env.oneAPI_download }}
+
+      - name: Download oneAPI Fortran Compiler installer if not cached
+        if: steps.cache-downloads.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          # Create a directory for downloads
+          mkdir C:\downloads-cache
+          cd C:\downloads-cache
+
+          # Download the Intel oneAPI Fortran Compiler installer
+          $downloadUrl = 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/${{ env.oneAPI_download }}'
+          Invoke-WebRequest -Uri $downloadUrl -OutFile 'intel-fortran-installer.exe'
+
+      - name: Install Intel oneAPI Fortran Compiler
+        shell: powershell
+        run: |
+          mkdir C:\my-workdir
+          cd C:\my-workdir
+
+          C:\downloads-cache\intel-fortran-installer.exe -a --silent --eula accept
+
+      - name: Compile the SWD Fortran library
+        shell: cmd
+        run: |
+          # Setup the environment for Visual Studio and Intel Fortran
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat" --force
+
+          cd src\api\python\Cmake
+          rmdir /s /q Build_Win64
+          mkdir Build_Win64
+          cd Build_Win64
+
+          # Generate the Visual Studio project files
+          cmake -G "Visual Studio 17 2022" -A x64 -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE ..
+
+          # Compile using the Release configuration
+          cmake --build . --config Release
+
+          # List the generated files
+          dir /S
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.3"
+          python-version: ${{ env.python_version_build }}
+          enable-cache: true
+
+      - name: Build wheel
+        shell: powershell
+        run: |
+          cd src\api\python
+
+          # Install auditwheel and any other dependencies
+          uv sync --only-group=build
+
+          # Create the wheel file (can also use "pip wheel .")
+          # The file ends up in the "dist" directory
+          uv build --wheel
+
+          dir /S dist
+
+      - name: Install the wheel
+        shell: powershell
+        run: |
+          cd tests\python
+
+          # Create a virtual environment with the oldest supported Python version
+          uv venv .venv --clear --no-project --seed --python ${{ env.python_version_test }}
+          .\.venv\Scripts\Activate.ps1
+
+          # Install the test dependencies and then the newly built manylinux wheel
+          pip install -r requirements_tests.txt
+          pip install ..\..\src\api\python\dist\spectral_wave_data*.whl
+
+          # Show the installation information with console scripts
+          pip show --verbose spectral_wave_data
+          dir /S .venv\Scripts
+
+          # Show the installed package version
+          python -c "import spectral_wave_data; print(spectral_wave_data.version_full)"
+          swd_meta --version
+
+      - name: Test the wheel
+        shell: powershell
+        run: |
+          cd tests\python
+          .\.venv\Scripts\Activate.ps1
+
+          # Run a subset of the tests to verify that the wheel is functional
+          $env:SWD_TEST_TYPE="quick"
+          python -m pytest -v
+
+      - name: Upload Python wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-wheel-win64
+          path: src/api/python/dist
