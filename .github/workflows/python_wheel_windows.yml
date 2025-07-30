@@ -32,6 +32,7 @@ jobs:
 
           # Download the Intel oneAPI Fortran Compiler installer
           $downloadUrl = 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/${{ env.oneAPI_download }}'
+          $ProgressPreference = 'SilentlyContinue'
           Invoke-WebRequest -Uri $downloadUrl -OutFile 'intel-fortran-installer.exe'
 
       - name: Install Intel oneAPI Fortran Compiler
