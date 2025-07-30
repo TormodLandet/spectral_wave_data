@@ -35,6 +35,8 @@ jobs:
           $ProgressPreference = 'SilentlyContinue'
           Invoke-WebRequest -Uri $downloadUrl -OutFile 'intel-fortran-installer.exe'
 
+          dir /S
+
       - name: Install Intel oneAPI Fortran Compiler
         shell: powershell
         run: |
@@ -46,8 +48,9 @@ jobs:
       - name: Compile the SWD Fortran library
         shell: cmd
         run: |
-          # Setup the environment for Visual Studio and Intel Fortran
+          REM --- Setup the environment for Visual Studio and Intel Fortran
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64
+          dir /S ""C:\Program Files (x86)\Intel"
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat" --force
 
           cd src\api\python\Cmake
@@ -55,13 +58,13 @@ jobs:
           mkdir Build_Win64
           cd Build_Win64
 
-          # Generate the Visual Studio project files
+          REM --- Generate the Visual Studio project files
           cmake -G "Visual Studio 17 2022" -A x64 -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE ..
 
-          # Compile using the Release configuration
+          REM --- Compile using the Release configuration
           cmake --build . --config Release
 
-          # List the generated files
+          REM --- List the generated files
           dir /S
 
       - name: Install uv
