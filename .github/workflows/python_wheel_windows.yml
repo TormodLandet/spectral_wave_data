@@ -35,7 +35,7 @@ jobs:
           $ProgressPreference = 'SilentlyContinue'
           Invoke-WebRequest -Uri $downloadUrl -OutFile 'intel-fortran-installer.exe'
 
-          dir /S
+          Get-ChildItem -Recurse -Path .
 
       - name: Install Intel oneAPI Fortran Compiler
         shell: powershell
@@ -86,7 +86,7 @@ jobs:
           # The file ends up in the "dist" directory
           uv build --wheel
 
-          dir /S dist
+          Get-ChildItem -Recurse -Path dist
 
       - name: Install the wheel
         shell: powershell
@@ -103,7 +103,7 @@ jobs:
 
           # Show the installation information with console scripts
           pip show --verbose spectral_wave_data
-          dir /S .venv\Scripts
+          Get-ChildItem -Recurse -Path .venv\Scripts
 
           # Show the installed package version
           python -c "import spectral_wave_data; print(spectral_wave_data.version_full)"
