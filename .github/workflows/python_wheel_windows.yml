@@ -119,17 +119,23 @@ jobs:
       - name: Compile the SWD Fortran library
         shell: cmd
         run: |
-          ECHO .....................................................................................
-          ECHO ..... Setup the environment for Visual Studio .......................................
-          CALL "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64
+          REM This seems to be included in the oneAPI setvars.bat script
+          REM ECHO .....................................................................................
+          REM ECHO ..... Setup the environment for Visual Studio .......................................
+          REM CALL "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64
 
           ECHO .....................................................................................
-          ECHO ..... Setup the environment for Intel oneAPI (ifort) ................................
+          ECHO ..... Setup the environment for Intel oneAPI  .......................................
           CALL "${{ env.oneAPI_install_dir }}\setvars.bat" --force
 
           ECHO .....................................................................................
           ECHO ..... Test the environment ..........................................................
-          ifort /logo
+          cl --version
+          ifx --version
+
+          set "path_ifx=${{ env.oneAPI_install_dir }}\compiler\latest\bin\ifx.exe"
+          set "path_ifx2=%path_ifx:\=/%"
+          %path_ifx2% --version
 
           CD src\api\python\Cmake
           RMDIR /s /q Build_Win64
@@ -141,7 +147,8 @@ jobs:
           cmake -G "Visual Studio 17 2022" ^
             -A x64 ^
             -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE ^
-            -DCMAKE_Fortran_COMPILER=ifort ^
+            -DCMAKE_Fortran_COMPILER="%path_ifx2%" ^
+            -T fortran=ifx ^
             ..
           IF %ERRORLEVEL% NEQ 0 (
             ECHO Error occurred during CMake build generation
