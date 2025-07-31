@@ -72,6 +72,10 @@ jobs:
           CD Build_Win64
 
           ECHO .....................................................................................
+          ECHO ..... Setup the environment for Intel oneAPI  .......................................
+          CALL "C:\Program Files (x86)\Intel\oneAPI\setvars.bat" --force
+
+          ECHO .....................................................................................
           ECHO ..... Find full path to ifort (CMake is being difficult ...) ........................
           FOR /F "delims=" %%i IN ('where %FC%') DO SET "FC_PATH=%%i"
           IF NOT DEFINED FC_PATH (
@@ -81,6 +85,10 @@ jobs:
           ECHO Found Fortran compiler at: %FC_PATH%
           SET "FC_PATH2=%FC_PATH:\=/%"
           ECHO Path with forward slashes: %FC_PATH2%
+
+          REM Set the C compiler to use the Microsoft Visual C++ compiler
+          REM For some reason CC gets set to icl which is not present ...?
+          SET "CC=cl"
 
           ECHO .....................................................................................
           ECHO ..... CMake: Generate the Visual Studio build files .................................
