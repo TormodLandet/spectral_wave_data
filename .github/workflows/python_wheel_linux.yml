@@ -1,12 +1,16 @@
 name: "Build Python Wheel on Linux"
 
-on: [push, pull_request]
+on: [push, pull_request, workflow_call]
+
+env:
+  python_version_build: "3.13"
+  python_version_test: "3.10"
 
 jobs:
-  build_wheels:
+  build_wheel:
     name: Build oldest supported manylinux wheel
     runs-on: ubuntu-latest
-    #container: quay.io/pypa/manylinux2014_x86_64  # Fails to run on GitHub Actions
+    #container: quay.io/pypa/manylinux2014_x86_64  # Fails to run on GitHub Actions, too old libc
     container: quay.io/pypa/manylinux_2_28_x86_64  # GCC version 14, Redhat 8 / Ubuntu 18.10
     
     steps:
@@ -21,7 +25,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           version: "0.8.3"
-          python-version: 3.13
+          python-version:  ${{ env.python_version_build }}
           enable-cache: true
 
       - name: Build wheel
@@ -57,7 +61,7 @@ jobs:
           cd tests/python
 
           # Create a virtual environment with the oldest supported Python version
-          uv venv .venv --clear --no-project --seed --python 3.10
+          uv venv .venv --clear --no-project --seed --python ${{ env.python_version_test }}
           source .venv/bin/activate
 
           # Install the test dependencies and then the newly built manylinux wheel
@@ -74,12 +78,13 @@ jobs:
           python -c "import spectral_wave_data; print(spectral_wave_data.version_full)"
           swd_meta --version
 
-      - name: Test the wheel
+      - name: Test the wheel ("quick" suite of tests)
         run: |
           cd tests/python
           source .venv/bin/activate
 
           # Run a subset of the tests to verify that the wheel is functional
+          # (the release workflow runs the full suite of tests)
           export SWD_TEST_TYPE=quick
           python -m pytest -v
 

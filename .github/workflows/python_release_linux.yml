@@ -1,0 +1,65 @@
+name: "Release Python Wheel on Linux"
+
+# For testing the workflow
+on: [push]
+# on:
+#  release:
+#     types: [created]
+
+env:
+  python_version_test: "3.10"
+
+jobs:
+  build_wheel:
+    uses: ./.github/workflows/python_wheel_linux.yml
+    secrets: inherit
+
+  release_wheel:
+    name: Release the manylinux wheel
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the wheel artifact we just built and uploaded
+        uses: actions/download-artifact@v4
+        with:
+          path: ./downloaded-wheels
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.3"
+          python-version: 3.13
+          enable-cache: true
+
+      - name: Install the wheel
+        run: |
+          cd tests/python
+          ls -lhR ../../downloaded-wheels
+
+          # Create a virtual environment with the oldest supported Python version
+          uv venv .venv_release --clear --no-project --seed --python ${{ env.python_version_test }}
+          source .venv_release/bin/activate
+
+          # Install the test dependencies and then the newly built manylinux wheel
+          pip install -r requirements_tests.txt
+          pip install ../../downloaded-wheels/spectral_wave_data*manylinux_2_28_x86_64*.whl
+
+          # Show the installed package version
+          swd_meta --version
+
+      - name: Test the wheel (full suite of tests)
+        run: |
+          cd tests/python
+          source .venv_release/bin/activate
+
+          # Run all unit tests
+          python -m pytest -v
+
+      - name: Publish the wheel to PyPI
+        run: |
+          uv publish \
+            --trusted-publishing=always \
+            --no-config \
+            ./the-wheelhouse/spectral_wave_data*manylinux*.whl
