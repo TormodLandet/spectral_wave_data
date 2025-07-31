@@ -27,12 +27,12 @@ jobs:
       - name: Show compiler information
         shell: cmd
         run: |
-          ECHO ...... VARS .........................................................................
+          ECHO ...... Configuration ................................................................
           ECHO fortran_compiler=%fortran_compiler%
           ECHO fortran_compiler_version=%fortran_compiler_version%
-          ECHO
+          ECHO ...... Resulting environmental variables ............................................
           ECHO PATH=%PATH%
-          ECHO
+          ECHO -------
           ECHO FC=%FC%
           ECHO CC=%CC%
 
@@ -72,9 +72,20 @@ jobs:
           CD Build_Win64
 
           ECHO .....................................................................................
+          ECHO ..... Find full path to ifort (CMake is being difficult ...) ........................
+          FOR /F "delims=" %%i IN ('where %FC%') DO SET "FC_PATH=%%i"
+          IF NOT DEFINED FC_PATH (
+              ECHO Error: Fortran compiler %FC% not found in PATH
+              EXIT /B 1
+          )
+          ECHO Found Fortran compiler at: %FC_PATH%
+          SET "FC_PATH2=%FC_PATH:\=/%"
+          ECHO Path with forward slashes: %FC_PATH2%
+
+          ECHO .....................................................................................
           ECHO ..... CMake: Generate the Visual Studio build files .................................
           cmake -G "Visual Studio 17 2022" -A x64 -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE ^
-            -DCMAKE_Fortran_COMPILER=%FC% -T fortran=ifort ^
+            -DCMAKE_Fortran_COMPILER="%FC_PATH2%" -T fortran=%FC% ^
             ..
           IF %ERRORLEVEL% NEQ 0 (
             ECHO Error occurred during CMake build generation
