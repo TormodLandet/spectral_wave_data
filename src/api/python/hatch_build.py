@@ -44,16 +44,31 @@ class CustomBuildHook(BuildHookInterface):
         # Bundle the compiled library
         ################################
 
-        py_dir = Path(self.root).resolve(strict=True)
+        # Make a list of possible paths to the compiled library (platform-dependent)
+        lib_search_paths: list[Path] = []
+        cmake_dir = Path(self.root).resolve(strict=True) / "Cmake"
         if sys.platform.startswith("linux"):
-            lib = py_dir / "Cmake/Build_Linux/libSpectralWaveData.so"
+            lib_search_paths.append(cmake_dir / "Build_Linux/libSpectralWaveData.so")
         elif sys.platform.startswith("win"):
-            lib = py_dir / "Cmake/Build_Win64/SpectralWaveData.dll"
+            lib_search_paths.append(cmake_dir / "Build_Win64/Release/SpectralWaveData.dll")
+            lib_search_paths.append(cmake_dir / "Build_Win64/Debug/SpectralWaveData.dll")
+            lib_search_paths.append(cmake_dir / "Build_Win64/SpectralWaveData.dll")
         else:
             raise RuntimeError(f"Unsupported build platform: {sys.platform}")
 
-        if not lib.exists():
-            self.app.abort(f"The required file from the Fortran build folder is missing: {lib}")
+        # Search for the compiled library in the specified paths
+        for candidate in lib_search_paths:
+            if candidate.exists():
+                lib = candidate
+                self.app.display_success(f"Found the compiled library at {candidate}")
+                break
+            else:
+                self.app.display_info(f"Could not find the compiled library at {candidate}")
+        else:
+            self.app.abort(
+                "Could not find the compiled library. "
+                "Please ensure the Fortran build step has been run successfully."
+            )
 
         build_data["force_include"][str(lib.resolve(strict=True))] = (
             f"spectral_wave_data/{lib.name}"
