@@ -28,18 +28,23 @@ jobs:
         shell: cmd
         run: |
           ECHO ...... VARS .........................................................................
+          ECHO fortran_compiler=%fortran_compiler%
+          ECHO fortran_compiler_version=%fortran_compiler_version%
+          ECHO
           ECHO PATH=%PATH%
+          ECHO
           ECHO FC=%FC%
           ECHO CC=%CC%
 
-          ECHO env.FC=${{ env.FC }}
-          ECHO env.CC=${{ env.CC }}
-
-          ECHO fortran_compiler=%fortran_compiler%
-          ECHO env.fortran_compiler=${{ env.fortran_compiler }}
-
-          ECHO fortran_compiler_version=%fortran_compiler_version%
-          ECHO env.fortran_compiler_version=${{ env.fortran_compiler_version }}
+          ECHO ...... where ........................................................................
+          ECHO Where is FC
+          where %FC%
+          ECHO Where is CC
+          where %CC%
+          ECHO Where is cl (Microsoft's C/C++ compiler)
+          where cl
+          ECHO Where is CMake
+          where cmake
 
           ECHO ...... Run ifort without an input file ..............................................
           ifort
@@ -68,7 +73,9 @@ jobs:
 
           ECHO .....................................................................................
           ECHO ..... CMake: Generate the Visual Studio build files .................................
-          cmake -G "Visual Studio 17 2022" -A x64 -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE ..
+          cmake -G "Visual Studio 17 2022" -A x64 -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE ^
+            -DCMAKE_Fortran_COMPILER=%FC% -T fortran=ifort ^
+            ..
           IF %ERRORLEVEL% NEQ 0 (
             ECHO Error occurred during CMake build generation
             GOTO :on_error
