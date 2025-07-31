@@ -16,6 +16,7 @@ jobs:
 
   release_wheel:
     name: Release the manylinux wheel
+    needs: build_wheel
     runs-on: ubuntu-latest
     
     steps:
@@ -62,4 +63,4 @@ jobs:
           uv publish \
             --trusted-publishing=always \
             --no-config \
-            ./the-wheelhouse/spectral_wave_data*manylinux*.whl
+            ./downloaded-wheels/spectral_wave_data*manylinux_2_28_x86_64*.whl
