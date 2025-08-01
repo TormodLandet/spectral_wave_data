@@ -1,9 +1,6 @@
 name: "Build Python Wheel on Linux"
 
-#on: [push, pull_request]
-on:
-  release:
-    types: [published]
+on: [push, pull_request]
 
 env:
   python_version_build: "3.14"
