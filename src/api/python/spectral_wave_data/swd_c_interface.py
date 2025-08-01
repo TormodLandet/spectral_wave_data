@@ -66,7 +66,14 @@ elif sys.platform.startswith("linux"):
 else:
     raise OSError("Not supported platform: " + sys.platform)
 
-swdlib = CDLL(str(swdlib_path))
+try:
+    swdlib = CDLL(str(swdlib_path))
+except FileNotFoundError as e:
+    raise FileNotFoundError(
+        f"ERROR: Cannot load the SWD library, even though it was found at {swdlib_path}.\n"
+        " You may be missing either Microsoft C++ Redistributables or"
+        " Intel Fortran compiler libraries on your system."
+    ) from e
 
 """
 ================================================================================================

@@ -15,37 +15,36 @@ jobs:
       - uses: actions/checkout@v4
 
       # Our own action to install Intel oneAPI Fortran Compiler (ifx)
-      - name: Install Intel oneAPI Fortran Compiler (ifx)
-        id: install-ifx
-        uses: ./.github/actions/windows_install_ifx
+      #- name: Install Intel oneAPI Fortran Compiler (ifx)
+      #  id: install-ifx
+      #  uses: ./.github/actions/windows_install_ifx
 
       # Semi-official action to install Fortran compilers
       # https://github.com/marketplace/actions/setup-fortran
-      #- name: Install Intel oneAPI Fortran Compiler (ifx)
-      #  id: setup-fortran
-      #  uses: fortran-lang/setup-fortran@v1
-      #  with:
-      #    compiler: intel
-      #    version: "2025.0"
+      - name: Install Intel oneAPI Fortran Compiler (ifx)
+        id: setup-fortran
+        uses: fortran-lang/setup-fortran@v1
+        with:
+          compiler: intel
+          version: "2025.0"
 
       - name: Compile the SWD Fortran library
         shell: cmd
         run: |
           REM Required when using our own "install-ifx" action above, not when using
           REM the semi-official "setup-fortran" action
-          ECHO .....................................................................................
-          ECHO ..... Setup the environment for Intel oneAPI  .......................................
-          CALL "${{ steps.install-ifx.outputs.install_dir }}\setvars.bat"
+          REM ECHO .....................................................................................
+          REM ECHO ..... Setup the environment for Intel oneAPI  .......................................
+          REM CALL "${{ steps.install-ifx.outputs.install_dir }}\setvars.bat"
 
-          ECHO .....................................................................................
-          ECHO ..... Test the environment - cl .....................................................
-          where cl
-          cl
+          ECHO ..... Test the environment - CC .....................................................
+          where %CC%
+          %CC%
           ECHO:
 
-          ECHO ..... Test the environment - ifx ....................................................
-          where ifx
-          ifx --version
+          ECHO ..... Test the environment - FC .....................................................
+          where %FC%
+          %FC%
           ECHO:
 
           ECHO ..... Test the environment - ninja ..................................................
@@ -83,13 +82,17 @@ jobs:
           CD src\api\python\Cmake
           DIR
           MKDIR Build_Win64
-          
+
           ECHO .....................................................................................
           ECHO ..... CMake: Generate the Visual Studio build files .................................
+          REM   For some reason, using the /MT flag (or CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded)
+          REM   causes the build to statically link the Fortran runtime libraries ...?? We want
+          REM   this so that the resulting wheel does not require the Intel Fortran libraries
           cmake -G "Ninja" ^
             -DCMAKE_C_COMPILER="%CC_PATH:\=\\%" ^
             -DCMAKE_Fortran_COMPILER="%FC_PATH:\=\\%" ^
             -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE ^
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded ^
             -DCMAKE_BUILD_TYPE=Release ^
             -S . -B Build_Win64
           IF %ERRORLEVEL% NEQ 0 (
@@ -99,7 +102,7 @@ jobs:
 
           ECHO .....................................................................................
           ECHO ..... CMake: Compile using the Release configuration ................................
-          cmake --build Build_Win64 --config Release
+          cmake --build Build_Win64 --verbose
           IF %ERRORLEVEL% NEQ 0 (
             ECHO Error occurred during CMake build compilation
             GOTO :on_error
@@ -107,7 +110,7 @@ jobs:
 
           ECHO .....................................................................................
           ECHO ..... List the resulting build files ................................................
-          DIR Build_Win64/Release
+          DIR Build_Win64\Release
 
           EXIT /B 0
 
@@ -131,14 +134,27 @@ jobs:
 
           cd src\api\python
 
-          # Install auditwheel and any other dependencies
-          uv sync --only-group=build
-
           # Create the wheel file (can also use "pip wheel .")
           # The file ends up in the "dist" directory
+          Write-Output "`n`n---------------------------------------------`n-- uv build --wheel `n"
           uv build --wheel
 
+          # Show the contents of the dist directory (should contain the wheel file)
+          Write-Output "`n`n---------------------------------------------`n-- Contents of dist/ `n"
           Get-ChildItem -Path dist -Recurse -Force
+
+          # Get the path to the wheel file and store as an environment variable for later steps
+          Write-Output "`n`n---------------------------------------------`n-- Path to *.whl `n"
+          $wheel = Get-ChildItem -Path dist\*.whl | Select-Object -Expand FullName
+          Write-Output "Found wheel file at: $wheel"
+          Write-Output "WHEEL_FILE=$wheel" >> $env:GITHUB_ENV
+
+          # List the contents of the wheel file
+          # (A wheel is a zip file and we load and then use a .NET function to list its contents)
+          Write-Output "`n`n---------------------------------------------`n-- Contents of whl `n"
+          [Reflection.Assembly]::LoadWithPartialName('System.IO.Compression.FileSystem')
+          [IO.Compression.ZipFile]::OpenRead($wheel).Entries.FullName |
+            ForEach-Object { Write-Output "File inside wheel: $_" }
 
       - name: Install the wheel
         shell: powershell
@@ -148,24 +164,30 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $true
 
           cd tests\python
-          dir ..\..\src\api\python\dist
-          $wheel = Get-ChildItem -Path ..\..\src\api\python\dist\spectral_wave_data-*.whl |
-            Select-Object -Expand FullName
-          Write-Host "Found wheel file name: $wheel"
 
           # Create a virtual environment with the oldest supported Python version
+          Write-Output "`n`n---------------------------------------------`n-- uv venv `n"
           uv venv .venv --clear --no-project --seed --python ${{ env.python_version_test }}
           .\.venv\Scripts\Activate.ps1
 
-          # Install the test dependencies and then the newly built manylinux wheel
+          # Install the test dependencies and then the newly built wheel file
+          Write-Output "`n`n---------------------------------------------`n-- pip install `n"
           pip install -r requirements_tests.txt
-          pip install $wheel
+          pip install $env:WHEEL_FILE
 
-          # Show the installation information with console scripts
+          # Debug: show the installation information with console scripts
+          Write-Output "`n`n---------------------------------------------`n-- pip show `n"
           pip show --verbose spectral_wave_data
           Get-ChildItem -Path .venv\Scripts -Recurse -Force
 
-          # Show the installed package version
+
+          # Debug: show the contents of the site-packages directory and ensure the DLL is present
+          Write-Output "`n`n---------------------------------------------`n-- dumpbin `n"
+          Get-ChildItem -Path .venv\Lib\site-packages\spectral_wave_data* -Force
+          dumpbin /dependents .venv\Lib\site-packages\spectral_wave_data\SpectralWaveData.dll
+
+          # Debug: show the installed package version
+          Write-Output "`n`n---------------------------------------------`n-- SWD version `n"
           python -c "import spectral_wave_data; print(spectral_wave_data.version_full)"
           swd_meta --version
 
@@ -176,15 +198,18 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
 
+          # Activate the virtual environment created above
+          Write-Output "`n`n---------------------------------------------`n-- activate venv `n"
           cd tests\python
           .\.venv\Scripts\Activate.ps1
 
           # Run a subset of the tests to verify that the wheel is functional
+          Write-Output "`n`n---------------------------------------------`n-- pytest `n"
           $env:SWD_TEST_TYPE="quick"
           python -m pytest -v
 
-      - name: Upload Python wheels
+      - name: Upload the newly built Python wheel for win_amd64 to GitHub artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: python-wheel-win64
+          name: python-wheel-win_amd64
           path: src/api/python/dist

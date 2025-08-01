@@ -1,6 +1,7 @@
 # Build SpectralWaveData library for Python package
 
-cmake_minimum_required(VERSION 3.18)
+# CMake version must be at least 3.15 for the CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded to work
+cmake_minimum_required(VERSION 3.15)
 
 set(LIB SpectralWaveData)
 
@@ -29,4 +30,3 @@ set(SRC_API_F
 
 add_library(${LIB} SHARED ${SRC_API_F})
 target_include_directories(${LIB} INTERFACE ${DIR_SRC_API_C})
-

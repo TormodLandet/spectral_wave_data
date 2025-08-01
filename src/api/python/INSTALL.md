@@ -14,12 +14,12 @@ To build on Windows you will need to install:
   installation bundle.
 * CMake
 * Microsoft Visual Studio
-* Python 3.x with the "wheel" package installed
+* Python 3.x with the "pip" and "wheel" packages installed
 
-If you do not have access to Visual Studio you may install `ninja` or
+If you do not have access to Visual Studio you may install `Ninja` or
 another build tool and modify the CMake command to use that as the build
-system instead of creating a Visual Studio Solution. We have not tested
-this, but it will probably work.
+system instead of creating a Visual Studio Solution.
+We use Ninja to build on Windows in out [GitHub Actions workflow](https://github.com/SpectralWaveData/spectral_wave_data/tree/master/.github/).
 
 ### Linux
 
@@ -49,8 +49,8 @@ Details for building with Visual Studio:
 1) Open the generated spectral_wave_data.sln with Visual Studio
 2) Make sure the 'Release' flag and actual Binary configuration (64 vs 32bit) is selected in the tool bar of Visual Studio.
 3) Build -> Build Solution
-4) Check that the solution build without error messages and check that SpectralWaveData.dll is created in the Release sub-folder.
-5) Put the `SpectralWaveData.dll` shared library file in the `Cmake/Build_Win64` sub-directory
+4) Check that the solution build without error messages
+5) Ensure that the newly built `SpectralWaveData.dll` file is now located in one of the `Cmake/Build_Win64` or `Cmake/Build_Win64/Release` sub-directories.
 
 ### Linux
 
