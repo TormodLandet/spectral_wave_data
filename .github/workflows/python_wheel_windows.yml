@@ -143,11 +143,13 @@ jobs:
           Write-Output "`n`n---------------------------------------------`n-- Contents of dist/ `n"
           Get-ChildItem -Path dist -Recurse -Force
 
-          # Get the path to the wheel file and store as an environment variable for later steps
+          # Store path to the wheel file in an environment variable for later steps
           Write-Output "`n`n---------------------------------------------`n-- Path to *.whl `n"
           $wheel = Get-ChildItem -Path dist\*.whl | Select-Object -Expand FullName
+          $wheel_basename = (Get-Item $wheel).Name
           Write-Output "Found wheel file at: $wheel"
           Write-Output "WHEEL_FILE=$wheel" >> $env:GITHUB_ENV
+          Write-Output "WHEEL_FILE_BASENAME=$wheel_basename" >> $env:GITHUB_ENV
 
           # List the contents of the wheel file
           # (A wheel is a zip file and we load and then use a .NET function to list its contents)
@@ -211,5 +213,5 @@ jobs:
       - name: Upload the newly built Python wheel for win_amd64 to GitHub artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: python-wheel-win_amd64
-          path: src/api/python/dist
+          name: ${{ env.WHEEL_FILE_BASENAME }}
+          path: ${{ env.WHEEL_FILE }}

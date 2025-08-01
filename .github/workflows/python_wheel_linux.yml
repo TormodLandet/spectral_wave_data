@@ -50,6 +50,12 @@ jobs:
           # The file ends up in the "wheelhouse/" directory
           uv run auditwheel repair dist/*.whl
 
+          # Store path to the wheel file in an environment variable for later steps
+          wheel="$(realpath wheelhouse/*.whl)"
+          echo -e "\n\nFound wheel file at: ${wheel}"
+          echo "WHEEL_FILE=${wheel}" >> $GITHUB_ENV
+          echo "WHEEL_FILE_BASENAME=$(basename ${wheel})" >> $GITHUB_ENV
+
       - name: Install the wheel
         run: |
           cd tests/python
@@ -60,7 +66,7 @@ jobs:
 
           # Install the test dependencies and then the newly built manylinux wheel
           pip install -r requirements_tests.txt
-          pip install ../../src/api/python/wheelhouse/spectral_wave_data*manylinux*.whl
+          pip install "${WHEEL_FILE}"
 
           # Show the installation information with console scripts
           pip show --verbose spectral_wave_data
@@ -81,8 +87,8 @@ jobs:
           export SWD_TEST_TYPE=quick
           python -m pytest -v
 
-      - name: Upload Python wheels
+      - name: Upload the newly built Python wheel for manylinux_2_28_x86_64 to GitHub artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: python-wheel-manylinux
-          path: src/api/python/wheelhouse
+          name: ${{ env.WHEEL_FILE_BASENAME }}
+          path: ${{ env.WHEEL_FILE }}
