@@ -1,4 +1,4 @@
-name: "Release Python Wheel on Linux"
+name: "Release Python Wheel on Windows"
 
 # For testing the workflow
 on: [push]
@@ -11,14 +11,14 @@ env:
 
 jobs:
   build_wheel:
-    uses: ./.github/workflows/python_wheel_linux.yml
+    uses: ./.github/workflows/python_wheel_windows.yml
     secrets: inherit
 
   release_wheel:
-    name: Release the manylinux wheel
+    name: Release the Windows wheel
     needs: build_wheel
-    runs-on: ubuntu-latest
-    
+    runs-on: windows-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -35,21 +35,23 @@ jobs:
           enable-cache: true
 
       - name: Install the wheel
+        shell: powershell
         run: |
-          cd tests/python
-
-          ls -lhR ../../downloaded-wheels
-          wheel="$(realpath ../../downloaded-wheels/python_wheel_for_manylinux_2_28_x86_64/*.whl)"
-          echo -e "\n\nFound wheel file at: ${wheel}"
-          echo "WHEEL_FILE=${wheel}" >> $GITHUB_ENV
+          cd tests\python
+          
+          Get-ChildItem -Path ../../downloaded-wheels -Recurse -Force
+          $wheel = Get-ChildItem -Path ../../downloaded-wheels/python_wheel_for_win_amd64/*.whl |
+            Select-Object -Expand FullName
+          Write-Output "Found wheel file at: $wheel"
+          Write-Output "WHEEL_FILE=$wheel" >> $env:GITHUB_ENV
 
           # Create a virtual environment with the oldest supported Python version
           uv venv .venv_release --clear --no-project --seed --python ${{ env.python_version_test }}
-          source .venv_release/bin/activate
+          .\.venv_release\Scripts\Activate.ps1
 
           # Install the test dependencies and then the newly built manylinux wheel
           pip install -r requirements_tests.txt
-          pip install "${wheel}"
+          pip install $wheel
 
           # Show the installed package version
           swd_meta --version
@@ -57,10 +59,10 @@ jobs:
       - name: Test the wheel (full suite of tests)
         run: |
           cd tests/python
-          source .venv_release/bin/activate
+          .\.venv_release\Scripts\Activate.ps1
 
           # Run all unit tests
           python -m pytest -v
 
       - name: Publish the wheel to PyPI
-        run: uv publish --trusted-publishing=always --no-config ${WHEEL_FILE}
+        run: uv publish --trusted-publishing=always --no-config $env.WHEEL_FILE
