@@ -60,7 +60,7 @@ runs:
         New-Item -Path '${{ inputs.log_dir }}'      -ItemType Directory -Force
         New-Item -Path '${{ inputs.extract_dir }}'  -ItemType Directory -Force
         New-Item -Path '${{ inputs.install_dir }}'  -ItemType Directory -Force
-        
+
         Get-ChildItem -Path '${{ inputs.install_dir }}\..' -Recurse -Force
 
     - name: Download the Intel oneAPI Fortran Compiler (if not already installed)
