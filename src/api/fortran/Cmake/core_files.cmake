@@ -14,10 +14,12 @@ set(SRC_CORE
   ${DIR_SRC_API_F}/spectral_wave_data_shape_4_impl_2.f90
   ${DIR_SRC_API_F}/spectral_wave_data_shape_5_impl_1.f90
   ${DIR_SRC_API_F}/spectral_wave_data_shape_6_impl_1.f90
+  ${DIR_SRC_API_F}/spectral_wave_data_shape_7_impl_1.f90
   ${DIR_SRC_API_F}/swd_write_shape_1_or_2.f90
   ${DIR_SRC_API_F}/swd_write_shape_3.f90
   ${DIR_SRC_API_F}/swd_write_shape_4_or_5.f90
   ${DIR_SRC_API_F}/swd_write_shape_6.f90
+  ${DIR_SRC_API_F}/swd_write_shape_7.f90
   ${DIR_SRC_API_F}/swd_version.f90)
 
 # Bundle the Intel compiler libraries when compiling shared libraries

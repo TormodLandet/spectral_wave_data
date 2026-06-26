@@ -112,6 +112,15 @@ The binary stream in the SWD file is outlined in the following pseudo code:
       do i = 1, n
           amp(i), kw(i), gam(i), phs(n)
       end do
+   case(7)
+      n, dk, d, zref, nsig, sig(1), sig(2), ..., sig(nsig)
+      do i = 1, nsteps
+          h(0), h(1), ..., h(n)
+          c_1(0), c_1(1), ..., c_1(n)
+          c_2(0), c_2(1), ..., c_2(n)
+          ...
+          c_nsig(0), c_nsig(1), ..., c_nsig(n)
+      end do
    end select
 
 where
@@ -288,4 +297,27 @@ where
      - float
      - 4
      - Wave phase :math:`\delta_j` (rad) for Airy model (shp=6).
+   * - zref
+     - float
+     - 4
+     - | Constant z-position of the lowest :math:`\sigma`-layer (``sig(1) = 0``,
+       | :math:`\sigma = 0`) for shape class 7.  Lies safely below all wave troughs,
+       | typically :math:`z_\text{ref} \approx -3H_s`.
+   * - nsig
+     - int
+     - 4
+     - Number of tabulated :math:`\sigma`-layers for shape class 7.  (``nsig`` :math:`\geq 2`)
+   * - sig(1), sig(2), ..., sig(nsig)
+     - float
+     - 4
+     - | Tabulated :math:`\sigma`-positions of the ``nsig`` layers for shape class 7.
+       | Must satisfy ``sig(1) = 0`` (bottom, :math:`z = z_\text{ref}`) and
+       | ``sig(nsig) = 1`` (surface, :math:`z = \zeta`).
+   * - c_1(), c_2(), ..., c_nsig()
+     - complex
+     - 4+4
+     - | Spectral velocity-potential amplitudes for shape class 7 (real and imaginary part),
+       | one array per :math:`\sigma`-layer, ``nsig`` layers in total.
+       | ``c_1()`` is the **bottom** layer (:math:`\sigma=0`, flat at ``z = zref``);
+       | ``c_nsig()`` is the **surface** layer (:math:`\sigma=1`, following the free surface).
 
