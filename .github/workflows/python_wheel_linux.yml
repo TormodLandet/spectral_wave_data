@@ -14,7 +14,7 @@ jobs:
     container: quay.io/pypa/manylinux_2_28_x86_64  # GCC version 14, Redhat 8 / Ubuntu 18.10
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Compile the SWD Fortran library
         run: |
@@ -88,7 +88,7 @@ jobs:
           python -m pytest -v
 
       - name: Upload the newly built Python wheel for manylinux_2_28_x86_64 to GitHub artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python_wheel_for_manylinux_2_28_x86_64
           path: ${{ env.WHEEL_FILE }}
