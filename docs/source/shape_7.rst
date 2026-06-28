@@ -6,6 +6,9 @@ Shape class 7
   Shape class 7 is **experimental**. The file format and API may change in
   future versions.
 
+  Only ``amp = 1`` (complex amplitudes with conjugate symmetry) is supported.
+  The constructor raises an error for any other ``amp`` value.
+
 This shape class describes long-crested waves in a **wave-following sigma-coordinate**
 representation.  Instead of evaluating the velocity potential with a single vertical basis function
 (as in shape 2), the potential is stored on :math:`N_\sigma` horizontal layers that deform with the
@@ -87,6 +90,20 @@ where
 
    \zeta_x = \sum_{j=1}^n k_j\,\mathcal{Im}\bigl\{h_j(t)\,X_j(x)\bigr\}
 
+The Euler time derivative at fixed physical :math:`z` is
+
+.. math::
+
+   \frac{\partial\phi}{\partial t}\bigg|_z
+   = \frac{\partial\Phi}{\partial t}\bigg|_\sigma
+   - \frac{\sigma\,\zeta_t}{H}\,\phi_\sigma
+
+where :math:`\zeta_t = \partial\zeta/\partial t` is the Euler time derivative of the free
+surface, and :math:`\partial\Phi/\partial t|_\sigma` is interpolated from the numerically
+reconstructed time derivatives of :math:`c_{j,m}(t)`.  The second term is the
+chain-rule correction due to the time-varying sigma frame; it is absent from
+:math:`\partial\Phi/\partial t|_\sigma` alone.
+
 **Below** :math:`z_\text{ref}`:
 
 A shape-2 style extrapolation is applied using the bottom-layer coefficients :math:`c_{j,1}(t)` (the
@@ -109,7 +126,9 @@ or :math:`Z_j(z') = e^{k_j z'}` for infinite depth.
 
 **Above** :math:`\zeta(x,t)`:
 
-The surface value (:math:`\sigma = 1`) is returned.
+The sigma coordinate is clamped to :math:`\sigma = 1`, so the surface-layer
+value is returned unchanged.  Querying above the free surface never raises an
+error.
 
 
 Pressure
@@ -153,7 +172,7 @@ SWD header:
      - float
      - Constant :math:`z`-position of the lowest :math:`\sigma`-layer
        (:math:`\sigma=0`).  Should be below all wave troughs.
-   * - :math:`N_\sigma` (``nsig``)
+   * - :math:`N_\sigma` (``nlayers``)
      - int
      - Number of :math:`\sigma`-layers (:math:`N_\sigma \ge 2`)
    * - :math:`\sigma_1, \dots, \sigma_{N_\sigma}`
@@ -195,4 +214,68 @@ the stored derivative data.
 exploiting the recursive evaluation :math:`X_j = \kappa_1 \cdot X_{j-1}`
 with :math:`\kappa_1 = e^{-i \Delta k\, x_{swd}}`.
 
+**Expansion order ``norder``.**  The constructor accepts the ``norder`` keyword
+for API compatibility; it currently has no effect on shape-7 kinematics.
+Piecewise-linear sigma interpolation is always used regardless of ``norder``.
+
 See :doc:`swd_format` for the binary file layout.
+
+
+Supported API methods
+^^^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :widths: 30 40 30
+   :header-rows: 1
+
+   * - API method
+     - Quantity
+     - Shape 7 status
+   * - ``phi(x,y,z)``
+     - :math:`\phi(x,z,t)`
+     - Supported
+   * - ``phi_t(x,y,z)``
+     - :math:`\partial\phi/\partial t`
+     - Supported
+   * - ``stream(x,y,z)``
+     - :math:`\varphi(x,z,t)`
+     - **Not supported** — returns 0
+   * - ``grad_phi(x,y,z)``
+     - :math:`\nabla\phi`
+     - Supported
+   * - ``grad_phi_2nd(x,y,z)``
+     - :math:`\nabla\nabla\phi`
+     - **Not yet implemented** — returns 0
+   * - ``acc_euler(x,y,z)``
+     - :math:`\nabla(\partial\phi/\partial t)`
+     - **Not yet implemented** — returns 0
+   * - ``acc_particle(x,y,z)``
+     - :math:`\mathrm{D}(\nabla\phi)/\mathrm{D}t`
+     - **Not yet implemented** — returns 0
+   * - ``elev(x,y)``
+     - :math:`\zeta(x,t)`
+     - Supported
+   * - ``elev_t(x,y)``
+     - :math:`\partial\zeta/\partial t`
+     - Supported
+   * - ``grad_elev(x,y)``
+     - :math:`\nabla\zeta`
+     - Supported
+   * - ``grad_elev_2nd(x,y)``
+     - :math:`\nabla^2\zeta`
+     - Supported
+   * - ``pressure(x,y,z)``
+     - :math:`p(x,z,t)`
+     - Supported
+   * - ``bathymetry(x,y)``
+     - :math:`d(x,y)`
+     - Supported
+   * - ``bathymetry_nvec(x,y)``
+     - sea-floor normal
+     - Supported
+   * - ``convergence(...)``
+     - convergence CSV
+     - **Not supported** — raises error
+   * - ``strip(...)``
+     - strip time window
+     - **Not supported** — raises error
