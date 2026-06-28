@@ -31,6 +31,12 @@ jobs:
       - name: Compile the SWD Fortran library
         shell: cmd
         run: |
+          REM This did not use to be necessary, but in 2026 it seems we may need to load Visual
+          REM Studio Build Tools environment variables to make the compilers work??
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do (
+              call "%%i\Common7\Tools\VsDevCmd.bat" -arch=x64
+          )
+
           REM Required when using our own "install-ifx" action above, not when using
           REM the semi-official "setup-fortran" action
           REM ECHO .....................................................................................
@@ -38,13 +44,17 @@ jobs:
           REM CALL "${{ steps.install-ifx.outputs.install_dir }}\setvars.bat"
 
           ECHO ..... Test the environment - CC .....................................................
+          set CC=icx
           where %CC%
           %CC%
+          ECHO IGNORE warning about missing input files above (we just want the version number)
           ECHO:
 
           ECHO ..... Test the environment - FC .....................................................
+          set FC=ifx
           where %FC%
           %FC%
+          ECHO IGNORE warning about missing input files above (we just want the version number)
           ECHO:
 
           ECHO ..... Test the environment - ninja ..................................................
@@ -55,26 +65,6 @@ jobs:
           ECHO ..... Test the environment - cmake ..................................................
           where cmake
           cmake --version
-          ECHO:
-
-          ECHO ..... Test the environment - FC full path ...........................................
-          echo FC=%FC%
-          FOR /F "delims=" %%i IN ('where %FC%') DO SET "FC_PATH=%%i"
-          IF NOT DEFINED FC_PATH (
-              ECHO Error: Fortran compiler %FC% not found in PATH
-              EXIT /B 1
-          )
-          ECHO Found Fortran compiler at: "%FC_PATH:\=\\%"
-          ECHO:
-
-          ECHO ..... Test the environment - CC full path ...........................................
-          echo CC=%CC%
-          FOR /F "delims=" %%i IN ('where %CC%') DO SET "CC_PATH=%%i"
-          IF NOT DEFINED CC_PATH (
-              ECHO Error: C compiler %CC% not found in PATH
-              EXIT /B 1
-          )
-          ECHO Found C compiler at: "%CC_PATH:\=\\%"
           ECHO:
 
           ECHO .....................................................................................
@@ -88,9 +78,10 @@ jobs:
           REM   For some reason, using the /MT flag (or CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded)
           REM   causes the build to statically link the Fortran runtime libraries ...?? We want
           REM   this so that the resulting wheel does not require the Intel Fortran libraries
-          cmake -G "Ninja" ^
-            -DCMAKE_C_COMPILER="%CC_PATH:\=\\%" ^
-            -DCMAKE_Fortran_COMPILER="%FC_PATH:\=\\%" ^
+          cmake ^
+            -G "Ninja" ^
+            -DCMAKE_C_COMPILER=icx ^
+            -DCMAKE_Fortran_COMPILER=ifx ^
             -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE ^
             -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded ^
             -DCMAKE_BUILD_TYPE=Release ^
