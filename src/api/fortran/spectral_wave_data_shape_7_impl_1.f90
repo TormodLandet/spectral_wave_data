@@ -196,6 +196,13 @@ self % shp = shp
 
 read(self % unit, end=98, err=99) amp
 self % amp = amp
+if (amp /= 1) then
+    write(err_msg(1),'(a,a)') 'SWD file: ', trim(self % file)
+    write(err_msg(2),'(a,i0,a)') 'amp=', amp, &
+        ' is not supported for shape 7. Only amp=1 is valid.'
+    call self % error % set_id_msg(err_proc, 1003, err_msg(1:2))
+    return
+end if
 
 read(self % unit, end=98, err=99) cprog
 self % prog = trim(cprog)
@@ -239,9 +246,30 @@ self % d = d
 
 read(self % unit, end=98, err=99) zref_c
 self % zref = zref_c
+if (self % zref > 0.0_wp) then
+    write(err_msg(1),'(a,a)') 'Input file: ', trim(self % file)
+    write(err_msg(2),'(a,f0.5)') 'zref = ', self % zref
+    err_msg(3) = 'zref must be <= 0 (should lie safely below all wave troughs)'
+    call self % error % set_id_msg(err_proc, 1004, err_msg(1:3))
+    return
+end if
+if (self % d > 0.0_wp .and. (self % d + self % zref) <= 0.0_wp) then
+    write(err_msg(1),'(a,a)') 'Input file: ', trim(self % file)
+    write(err_msg(2),'(a,f0.5,a,f0.5)') 'd = ', self % d, ', zref = ', self % zref
+    err_msg(3) = 'Effective depth d_eff = d + zref must be > 0 for finite-depth shape 7'
+    call self % error % set_id_msg(err_proc, 1004, err_msg(1:3))
+    return
+end if
 
 read(self % unit, end=98, err=99) nlayers_c
 self % nlayers = nlayers_c
+if (self % nlayers < 2) then
+    write(err_msg(1),'(a,a)') 'Input file: ', trim(self % file)
+    write(err_msg(2),'(a,i0)') 'nlayers = ', self % nlayers
+    err_msg(3) = 'nlayers must be >= 2 for shape 7'
+    call self % error % set_id_msg(err_proc, 1004, err_msg(1:3))
+    return
+end if
 
 allocate(self % sig(self % nlayers), stat=i)
 if (i /= 0) then
@@ -252,6 +280,33 @@ end if
 do m = 1, self % nlayers
     read(self % unit, end=98, err=99) sig_c
     self % sig(m) = sig_c
+end do
+
+! Validate sigma-layer positions
+if (abs(self % sig(1)) > 1.0e-6_wp) then
+    write(err_msg(1),'(a,a)') 'Input file: ', trim(self % file)
+    write(err_msg(2),'(a,f0.8)') 'sig(1) = ', self % sig(1)
+    err_msg(3) = 'sig(1) must be 0.0 for shape 7 (bottom layer at z = zref)'
+    call self % error % set_id_msg(err_proc, 1004, err_msg(1:3))
+    return
+end if
+if (abs(self % sig(self % nlayers) - 1.0_wp) > 1.0e-6_wp) then
+    write(err_msg(1),'(a,a)') 'Input file: ', trim(self % file)
+    write(err_msg(2),'(a,i0,a,f0.8)') &
+        'sig(nlayers=', self % nlayers, ') = ', self % sig(self % nlayers)
+    err_msg(3) = 'sig(nlayers) must be 1.0 for shape 7 (surface layer)'
+    call self % error % set_id_msg(err_proc, 1004, err_msg(1:3))
+    return
+end if
+do m = 1, self % nlayers - 1
+    if (self % sig(m+1) <= self % sig(m)) then
+        write(err_msg(1),'(a,a)') 'Input file: ', trim(self % file)
+        write(err_msg(2),'(a,i0,a,i0)') &
+            'Non-monotone sigma layers at indices ', m, ' and ', m+1
+        err_msg(3) = 'sigma-layer positions must be strictly increasing for shape 7'
+        call self % error % set_id_msg(err_proc, 1004, err_msg(1:3))
+        return
+    end if
 end do
 
 ! Set norder (ignored for shape 7; kinematics use sigma-coordinates)
@@ -585,10 +640,10 @@ end subroutine update_time
 ! Helper: compute wave elevation and free-surface slope at (xswd).
 ! Returns eta and zeta_x.
 !==============================================================================
-subroutine calc_elev_and_slope(self, xswd, eta, zeta_x)
+subroutine calc_elev_and_slope(self, xswd, eta, zeta_x, zeta_t)
 class(spectral_wave_data_shape_7_impl_1), intent(in) :: self
 real(wp), intent(in) :: xswd
-real(wp), intent(out) :: eta, zeta_x
+real(wp), intent(out) :: eta, zeta_x, zeta_t
 !
 integer :: j
 real(wp) :: kval
@@ -598,12 +653,14 @@ kappa1 = exp(cmplx(0.0_wp, -self % dk * xswd, kind=wp))
 Xfun = 1.0_wp
 eta = self % h_cur(0) % re
 zeta_x = 0.0_wp
+zeta_t = self % ht_cur(0) % re
 kval = 0.0_wp
 do j = 1, self % nsumx
     Xfun = kappa1 * Xfun
     kval = kval + self % dk
     eta = eta + real(self % h_cur(j) * Xfun)
     zeta_x = zeta_x + kval * aimag(self % h_cur(j) * Xfun)
+    zeta_t = zeta_t + real(self % ht_cur(j) * Xfun)
 end do
 end subroutine calc_elev_and_slope
 
@@ -713,14 +770,14 @@ real(knd), intent(in) :: x, y, z
 real(knd)             :: res
 !
 integer :: j, m
-real(wp) :: xswd, eta, zeta_x, z_prime, kval, Rfun, Zfun, Zfun_z, sigma_eval
+real(wp) :: xswd, eta, zeta_x, zeta_t, z_prime, kval, Rfun, Zfun, Zfun_z, sigma_eval
 real(wp) :: phi_val, u_val, dphi_dsigma
 complex(wp) :: kappa1, Xfun, cx
 !
 xswd = self % x0 + x * self % cbeta + y * self % sbeta
 
 if (real(z,wp) >= self % zref) then
-    call calc_elev_and_slope(self, xswd, eta, zeta_x)
+    call calc_elev_and_slope(self, xswd, eta, zeta_x, zeta_t)
     sigma_eval = min(max((real(z,wp) - self % zref) / (eta - self % zref), 0.0_wp), 1.0_wp)
     call interp_sigma(self, xswd, sigma_eval, phi_val, u_val, dphi_dsigma, &
                       self % c_cur, .false.)
@@ -751,7 +808,8 @@ class(spectral_wave_data_shape_7_impl_1), intent(in) :: self
 real(knd), intent(in) :: x, y, z
 real(knd)             :: res
 !
-res = 0.0_knd  ! Not implemented for sigma-coordinate shape
+! stream() is not supported for shape 7. Returns zero.
+res = 0.0_knd
 !
 end function stream
 
@@ -763,18 +821,24 @@ real(knd), intent(in) :: x, y, z
 real(knd)             :: res
 !
 integer :: j
-real(wp) :: xswd, eta, zeta_x, z_prime, kval, Rfun, Zfun, Zfun_z, sigma_eval
-real(wp) :: phi_val, u_val, dphi_dsigma
+real(wp) :: xswd, eta, zeta_x, zeta_t, z_prime, kval, Rfun, Zfun, Zfun_z, sigma_eval
+real(wp) :: phi_t_sig, phi_val, u_val, dphi_dsigma, H
 complex(wp) :: kappa1, Xfun, cx
 !
 xswd = self % x0 + x * self % cbeta + y * self % sbeta
 
 if (real(z,wp) >= self % zref) then
-    call calc_elev_and_slope(self, xswd, eta, zeta_x)
-    sigma_eval = min(max((real(z,wp) - self % zref) / (eta - self % zref), 0.0_wp), 1.0_wp)
-    call interp_sigma(self, xswd, sigma_eval, phi_val, u_val, dphi_dsigma, &
+    call calc_elev_and_slope(self, xswd, eta, zeta_x, zeta_t)
+    H = eta - self % zref
+    sigma_eval = min(max((real(z,wp) - self % zref) / H, 0.0_wp), 1.0_wp)
+    ! Phi_t at fixed sigma from ct_cur
+    call interp_sigma(self, xswd, sigma_eval, phi_t_sig, u_val, dphi_dsigma, &
                       self % ct_cur, .false.)
-    res = phi_val
+    ! phi_sigma from c_cur (for chain-rule correction at fixed physical z)
+    call interp_sigma(self, xswd, sigma_eval, phi_val, u_val, dphi_dsigma, &
+                      self % c_cur, .false.)
+    ! Euler time derivative at fixed z: Phi_t|sigma - sigma * zeta_t / H * phi_sigma
+    res = phi_t_sig - sigma_eval * zeta_t / H * dphi_dsigma
 else
     z_prime = real(z,wp) - self % zref
     kappa1 = exp(cmplx(0.0_wp, -self % dk * xswd, kind=wp))
@@ -801,14 +865,14 @@ real(knd), intent(in) :: x, y, z
 real(knd)             :: res(3)
 !
 integer :: j
-real(wp) :: xswd, eta, zeta_x, z_prime, kval, Rfun, Zfun, Zfun_z, sigma_eval
+real(wp) :: xswd, eta, zeta_x, zeta_t, z_prime, kval, Rfun, Zfun, Zfun_z, sigma_eval
 real(wp) :: phi_val, u_val, dphi_dsigma, H
 complex(wp) :: kappa1, Xfun, cx
 !
 xswd = self % x0 + x * self % cbeta + y * self % sbeta
 
 if (real(z,wp) >= self % zref) then
-    call calc_elev_and_slope(self, xswd, eta, zeta_x)
+    call calc_elev_and_slope(self, xswd, eta, zeta_x, zeta_t)
     H = eta - self % zref
     sigma_eval = min(max((real(z,wp) - self % zref) / H, 0.0_wp), 1.0_wp)
     call interp_sigma(self, xswd, sigma_eval, phi_val, u_val, dphi_dsigma, &
@@ -857,40 +921,9 @@ class(spectral_wave_data_shape_7_impl_1), intent(in) :: self
 real(knd), intent(in) :: x, y, z
 real(knd)             :: res(3)
 !
-integer :: j
-real(wp) :: xswd, eta, zeta_x, z_prime, kval, Rfun, Zfun, Zfun_z, sigma_eval
-real(wp) :: phi_val, u_val, dphi_dsigma, H
-complex(wp) :: kappa1, Xfun, cx
-!
-xswd = self % x0 + x * self % cbeta + y * self % sbeta
-
-if (real(z,wp) >= self % zref) then
-    call calc_elev_and_slope(self, xswd, eta, zeta_x)
-    H = eta - self % zref
-    sigma_eval = min(max((real(z,wp) - self % zref) / H, 0.0_wp), 1.0_wp)
-    call interp_sigma(self, xswd, sigma_eval, phi_val, u_val, dphi_dsigma, &
-                      self % ct_cur, .false.)
-    res(1) = (u_val - sigma_eval * zeta_x / H * dphi_dsigma) * self % cbeta
-    res(2) = (u_val - sigma_eval * zeta_x / H * dphi_dsigma) * self % sbeta
-    res(3) = dphi_dsigma / H
-else
-    z_prime = real(z,wp) - self % zref
-    kappa1 = exp(cmplx(0.0_wp, -self % dk * xswd, kind=wp))
-    Xfun = 1.0_wp
-    Rfun = 0.0_wp
-    kval = 0.0_wp
-    res = 0.0_knd
-    do j = 1, self % nsumx
-        kval = kval + self % dk
-        Xfun = kappa1 * Xfun
-        call depth_Zfun(self, kval, z_prime, Zfun, Zfun_z, Rfun)
-        cx = self % ct_cur(j,1) * Xfun
-        res(1) = res(1) + kval * cx % im * Zfun
-        res(3) = res(3) + cx % re * Zfun_z
-    end do
-    res(2) = res(1) * self % sbeta
-    res(1) = res(1) * self % cbeta
-end if
+! acc_euler() requires chain-rule corrections in the moving sigma-coordinate
+! frame and is not yet implemented for shape 7. Returns zero.
+res = 0.0_knd
 !
 end function acc_euler
 
@@ -901,15 +934,9 @@ class(spectral_wave_data_shape_7_impl_1), intent(in) :: self
 real(knd), intent(in) :: x, y, z
 real(knd)             :: res(3)
 !
-real(wp) :: a_euler(3), vel(3), g2nd(6)
-!
-a_euler = self % acc_euler(x, y, z)
-vel     = self % grad_phi(x, y, z)
-g2nd    = self % grad_phi_2nd(x, y, z)
-!
-res(1) = a_euler(1) + vel(1)*g2nd(1) + vel(2)*g2nd(2) + vel(3)*g2nd(3)
-res(2) = a_euler(2) + vel(1)*g2nd(2) + vel(2)*g2nd(4) + vel(3)*g2nd(5)
-res(3) = a_euler(3) + vel(1)*g2nd(3) + vel(2)*g2nd(5) + vel(3)*g2nd(6)
+! acc_particle() depends on acc_euler() and grad_phi_2nd(), both of which
+! are not yet implemented for shape 7. Returns zero.
+res = 0.0_knd
 !
 end function acc_particle
 
@@ -1019,15 +1046,15 @@ real(knd), intent(in) :: x, y, z
 real(knd)             :: res
 !
 integer :: j
-real(wp) :: xswd, eta, zeta_x, z_prime, kval, Rfun, Zfun, Zfun_z, sigma_eval
+real(wp) :: xswd, eta, zeta_x, zeta_t, z_prime, kval, Rfun, Zfun, Zfun_z, sigma_eval
 real(wp) :: phi_val, u_val, dphi_dsigma, H
-real(wp) :: phi_xswd, phi_z, phi_t_val
+real(wp) :: phi_xswd, phi_z, phi_t_val, phi_sig
 complex(wp) :: kappa1, Xfun, cx
 !
 xswd = self % x0 + x * self % cbeta + y * self % sbeta
 
 if (real(z,wp) >= self % zref) then
-    call calc_elev_and_slope(self, xswd, eta, zeta_x)
+    call calc_elev_and_slope(self, xswd, eta, zeta_x, zeta_t)
     H = eta - self % zref
     sigma_eval = min(max((real(z,wp) - self % zref) / H, 0.0_wp), 1.0_wp)
     ! Spatial gradients from c_cur
@@ -1035,9 +1062,12 @@ if (real(z,wp) >= self % zref) then
                       self % c_cur, .false.)
     phi_xswd = u_val - sigma_eval * zeta_x / H * dphi_dsigma
     phi_z    = dphi_dsigma / H
-    ! Euler time derivative from ct_cur
+    phi_sig  = dphi_dsigma   ! sigma-derivative of phi (for phi_t chain-rule)
+    ! Phi_t at fixed sigma from ct_cur
     call interp_sigma(self, xswd, sigma_eval, phi_t_val, u_val, dphi_dsigma, &
                       self % ct_cur, .false.)
+    ! Apply chain-rule: phi_t|z = Phi_t|sigma - sigma * zeta_t / H * phi_sigma
+    phi_t_val = phi_t_val - sigma_eval * zeta_t / H * phi_sig
 else
     z_prime = real(z,wp) - self % zref
     kappa1 = exp(cmplx(0.0_wp, -self % dk * xswd, kind=wp))
