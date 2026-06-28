@@ -13,11 +13,21 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+      
+      - name: Find Visual Studio
+        shell: cmd
+        run: |  
+          set VS_PATH=
+          for /f "usebackq tokens=*" %%i in (
+            `"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`
+          ) do set VS_PATH=%%i
 
-      # Our own action to install Intel oneAPI Fortran Compiler (ifx)
-      #- name: Install Intel oneAPI Fortran Compiler (ifx)
-      #  id: install-ifx
-      #  uses: ./.github/actions/windows_install_ifx
+          if "%VS_PATH%"=="" (
+            echo ERROR: Visual Studio not found
+            exit /b 1
+          )
+          echo Found VS at: %VS_PATH%
+          echo VS_PATH=%VS_PATH%>>%GITHUB_ENV%
 
       # Semi-official action to install Fortran compilers
       # https://github.com/marketplace/actions/setup-fortran
@@ -31,17 +41,9 @@ jobs:
       - name: Compile the SWD Fortran library
         shell: cmd
         run: |
-          REM This did not use to be necessary, but in 2026 it seems we may need to load Visual
-          REM Studio Build Tools environment variables to make the compilers work??
-          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do (
-              call "%%i\Common7\Tools\VsDevCmd.bat" -arch=x64
-          )
-
-          REM Required when using our own "install-ifx" action above, not when using
-          REM the semi-official "setup-fortran" action
-          REM ECHO .....................................................................................
-          REM ECHO ..... Setup the environment for Intel oneAPI  .......................................
-          REM CALL "${{ steps.install-ifx.outputs.install_dir }}\setvars.bat"
+          REM Initialize the Visual Studio environment
+          echo Using Visual Studio from: %VS_PATH%
+          call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -arch=x64
 
           ECHO ..... Test the environment - CC .....................................................
           set CC=icx
@@ -147,7 +149,7 @@ jobs:
           [IO.Compression.ZipFile]::OpenRead($wheel).Entries.FullName |
             ForEach-Object { Write-Output "File inside wheel: $_" }
 
-      - name: Install the wheel
+      - name: Install the wheel for testing
         shell: powershell
         run: |
           # Stop the script when a cmdlet or a native command fails
@@ -171,18 +173,26 @@ jobs:
           pip show --verbose spectral_wave_data
           Get-ChildItem -Path .venv\Scripts -Recurse -Force
 
-
-          # Debug: show the contents of the site-packages directory and ensure the DLL is present
+          # Debug: show the contents of the site-packages directory
           Write-Output "`n`n---------------------------------------------`n-- dumpbin `n"
           Get-ChildItem -Path .venv\Lib\site-packages\spectral_wave_data* -Force
-          dumpbin /dependents .venv\Lib\site-packages\spectral_wave_data\SpectralWaveData.dll
 
           # Debug: show the installed package version
           Write-Output "`n`n---------------------------------------------`n-- SWD version `n"
           python -c "import spectral_wave_data; print(spectral_wave_data.version_full)"
           swd_meta --version
 
-      - name: Test the wheel
+      - name: Show DLL debug info of the installed wheel
+        shell: cmd
+        run: |
+          REM Load the Visual Studio environment variables so that dumpbin can be found
+          call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -arch=x64
+
+          REM Show information about the newly built DLL that should be inside the installed wheel
+          cd tests\python
+          dumpbin /dependents .venv\Lib\site-packages\spectral_wave_data\SpectralWaveData.dll
+
+      - name: Test the installed wheel
         shell: powershell
         run: |
           # Stop the script when a cmdlet or a native command fails
