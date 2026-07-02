@@ -2,15 +2,19 @@ name: "Build Python Wheel on Linux"
 
 on: [push, pull_request]
 
+env:
+  python_version_build: "3.14"
+  python_version_test: "3.12"
+
 jobs:
-  build_wheels:
+  build_wheel:
     name: Build oldest supported manylinux wheel
     runs-on: ubuntu-latest
-    #container: quay.io/pypa/manylinux2014_x86_64  # Fails to run on GitHub Actions
+    #container: quay.io/pypa/manylinux2014_x86_64  # Fails to run on GitHub Actions, too old libc
     container: quay.io/pypa/manylinux_2_28_x86_64  # GCC version 14, Redhat 8 / Ubuntu 18.10
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Compile the SWD Fortran library
         run: |
@@ -18,10 +22,10 @@ jobs:
           bash ./CMakeBuild_Linux.bash
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.8.3"
-          python-version: 3.13
+          version: "0.11.25"  # Latest version of uv at time of commit, from 2026-06-26
+          python-version:  ${{ env.python_version_build }}
           enable-cache: true
 
       - name: Build wheel
@@ -51,7 +55,7 @@ jobs:
           cd tests/python
 
           # Create a virtual environment with the oldest supported Python version
-          uv venv .venv --clear --no-project --seed --python 3.10
+          uv venv .venv --clear --no-project --seed --python ${{ env.python_version_test }}
           source .venv/bin/activate
 
           # Install the test dependencies and then the newly built manylinux wheel
