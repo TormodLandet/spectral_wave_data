@@ -155,7 +155,7 @@ jobs:
           [IO.Compression.ZipFile]::OpenRead($wheel).Entries.FullName |
             ForEach-Object { Write-Output "File inside wheel: $_" }
 
-      - name: Install the wheel
+      - name: Install the wheel for testing
         shell: powershell
         run: |
           # Stop the script when a cmdlet or a native command fails

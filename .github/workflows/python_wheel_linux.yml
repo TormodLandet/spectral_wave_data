@@ -3,10 +3,6 @@ name: "Build Python Wheel on Linux"
 on: [push, pull_request, workflow_call]
 
 env:
-  python_version_build: "3.13"
-  python_version_test: "3.10"
-
-env:
   python_version_build: "3.14"
   python_version_test: "3.12"
 
@@ -92,7 +88,7 @@ jobs:
           python -m pytest -v
 
       - name: Upload the newly built Python wheel for manylinux_2_28_x86_64 to GitHub artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python_wheel_for_manylinux_2_28_x86_64
           path: ${{ env.WHEEL_FILE }}
