@@ -41,12 +41,6 @@ jobs:
       - name: Compile the SWD Fortran library
         shell: cmd
         run: |
-          REM Required when using our own "install-ifx" action above, not when using
-          REM the semi-official "setup-fortran" action
-          REM ECHO .....................................................................................
-          REM ECHO ..... Setup the environment for Intel oneAPI  .......................................
-          REM CALL "${{ steps.install-ifx.outputs.install_dir }}\setvars.bat"
-
           REM Initialize the Visual Studio environment
           echo Using Visual Studio from: %VS_PATH%
           call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -arch=x64
