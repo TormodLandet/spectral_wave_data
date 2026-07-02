@@ -1,6 +1,6 @@
 # All the Fortran implementation source files except kind_values.f90
-# You need to define DIR_SRC_API_F before include()-ing this file
 set(SRC_CORE
+    ${DIR_SRC_API_F}/swd_fft.f90
   ${DIR_SRC_API_F}/open_swd_file.F90
   ${DIR_SRC_API_F}/spectral_interpolation.f90
   ${DIR_SRC_API_F}/spectral_wave_data.f90
@@ -20,7 +20,21 @@ set(SRC_CORE
   ${DIR_SRC_API_F}/swd_write_shape_4_or_5.f90
   ${DIR_SRC_API_F}/swd_write_shape_6.f90
   ${DIR_SRC_API_F}/swd_write_shape_7.f90
-  ${DIR_SRC_API_F}/swd_version.f90)
+  ${DIR_SRC_API_F}/swd_version.f90
+)
+
+# You need to define DIR_SRC_API_F before include()-ing this file
+set(DIR_THIRDPARTY ${DIR_SRC_API_F}/../../thirdparty)
+
+# The following option is used to include the vendored PocketFFT library in the build.
+# In the future we may want to support other FFT libraries so we support turning PocketFFT on/off. 
+option(USE_POCKETFFT "Use the vendored PocketFFT library" ON)
+if(USE_POCKETFFT)
+    set(SRC_CORE
+        ${SRC_CORE}
+        ${DIR_THIRDPARTY}/pocketfft/swd_pocketfft_c_api.cpp
+    )
+endif()
 
 # Bundle the Intel compiler libraries when compiling shared libraries
 if (CMAKE_Fortran_COMPILER_ID STREQUAL "Intel")
