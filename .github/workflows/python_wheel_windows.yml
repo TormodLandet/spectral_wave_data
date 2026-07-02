@@ -3,21 +3,31 @@ name: "Build Python Wheel on Windows"
 on: [push, pull_request]
 
 env:
-  python_version_build: "3.13"
-  python_version_test: "3.10"
+  python_version_build: "3.14"
+  python_version_test: "3.12"
 
 jobs:
   build_wheels:
     name: Build Windows Wheel using Intel oneAPI Fortran Compiler (ifort)
-    runs-on: windows-latest
+    runs-on: windows-2025
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      
+      - name: Find Visual Studio
+        shell: cmd
+        run: |  
+          set VS_PATH=
+          for /f "usebackq tokens=*" %%i in (
+            `"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`
+          ) do set VS_PATH=%%i
 
-      # Our own action to install Intel oneAPI Fortran Compiler (ifx)
-      #- name: Install Intel oneAPI Fortran Compiler (ifx)
-      #  id: install-ifx
-      #  uses: ./.github/actions/windows_install_ifx
+          if "%VS_PATH%"=="" (
+            echo ERROR: Visual Studio not found
+            exit /b 1
+          )
+          echo Found VS at: %VS_PATH%
+          echo VS_PATH=%VS_PATH%>>%GITHUB_ENV%
 
       # Semi-official action to install Fortran compilers
       # https://github.com/marketplace/actions/setup-fortran
@@ -26,7 +36,7 @@ jobs:
         uses: fortran-lang/setup-fortran@v1
         with:
           compiler: intel
-          version: "2025.0"
+          version: "2025.2"
 
       - name: Compile the SWD Fortran library
         shell: cmd
@@ -37,14 +47,22 @@ jobs:
           REM ECHO ..... Setup the environment for Intel oneAPI  .......................................
           REM CALL "${{ steps.install-ifx.outputs.install_dir }}\setvars.bat"
 
+          REM Initialize the Visual Studio environment
+          echo Using Visual Studio from: %VS_PATH%
+          call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -arch=x64
+
           ECHO ..... Test the environment - CC .....................................................
+          set CC=icx
           where %CC%
           %CC%
+          ECHO IGNORE warning about missing input files above (we just want the version number)
           ECHO:
 
           ECHO ..... Test the environment - FC .....................................................
+          set FC=ifx
           where %FC%
           %FC%
+          ECHO IGNORE warning about missing input files above (we just want the version number)
           ECHO:
 
           ECHO ..... Test the environment - ninja ..................................................
@@ -55,26 +73,6 @@ jobs:
           ECHO ..... Test the environment - cmake ..................................................
           where cmake
           cmake --version
-          ECHO:
-
-          ECHO ..... Test the environment - FC full path ...........................................
-          echo FC=%FC%
-          FOR /F "delims=" %%i IN ('where %FC%') DO SET "FC_PATH=%%i"
-          IF NOT DEFINED FC_PATH (
-              ECHO Error: Fortran compiler %FC% not found in PATH
-              EXIT /B 1
-          )
-          ECHO Found Fortran compiler at: "%FC_PATH:\=\\%"
-          ECHO:
-
-          ECHO ..... Test the environment - CC full path ...........................................
-          echo CC=%CC%
-          FOR /F "delims=" %%i IN ('where %CC%') DO SET "CC_PATH=%%i"
-          IF NOT DEFINED CC_PATH (
-              ECHO Error: C compiler %CC% not found in PATH
-              EXIT /B 1
-          )
-          ECHO Found C compiler at: "%CC_PATH:\=\\%"
           ECHO:
 
           ECHO .....................................................................................
@@ -88,9 +86,10 @@ jobs:
           REM   For some reason, using the /MT flag (or CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded)
           REM   causes the build to statically link the Fortran runtime libraries ...?? We want
           REM   this so that the resulting wheel does not require the Intel Fortran libraries
-          cmake -G "Ninja" ^
-            -DCMAKE_C_COMPILER="%CC_PATH:\=\\%" ^
-            -DCMAKE_Fortran_COMPILER="%FC_PATH:\=\\%" ^
+          cmake ^
+            -G "Ninja" ^
+            -DCMAKE_C_COMPILER=icx ^
+            -DCMAKE_Fortran_COMPILER=ifx ^
             -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE ^
             -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded ^
             -DCMAKE_BUILD_TYPE=Release ^
@@ -119,9 +118,9 @@ jobs:
           EXIT /B 1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.8.3"
+          version: "0.11.25"  # Latest version of uv at time of commit, from 2026-06-26
           python-version: ${{ env.python_version_build }}
           enable-cache: true
 
@@ -182,18 +181,26 @@ jobs:
           pip show --verbose spectral_wave_data
           Get-ChildItem -Path .venv\Scripts -Recurse -Force
 
-
-          # Debug: show the contents of the site-packages directory and ensure the DLL is present
+          # Debug: show the contents of the site-packages directory
           Write-Output "`n`n---------------------------------------------`n-- dumpbin `n"
           Get-ChildItem -Path .venv\Lib\site-packages\spectral_wave_data* -Force
-          dumpbin /dependents .venv\Lib\site-packages\spectral_wave_data\SpectralWaveData.dll
 
           # Debug: show the installed package version
           Write-Output "`n`n---------------------------------------------`n-- SWD version `n"
           python -c "import spectral_wave_data; print(spectral_wave_data.version_full)"
           swd_meta --version
 
-      - name: Test the wheel
+      - name: Show DLL debug info of the installed wheel
+        shell: cmd
+        run: |
+          REM Load the Visual Studio environment variables so that dumpbin can be found
+          call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -arch=x64
+
+          REM Show information about the newly built DLL that should be inside the installed wheel
+          cd tests\python
+          dumpbin /dependents .venv\Lib\site-packages\spectral_wave_data\SpectralWaveData.dll
+
+      - name: Test the installed wheel
         shell: powershell
         run: |
           # Stop the script when a cmdlet or a native command fails
@@ -211,7 +218,7 @@ jobs:
           python -m pytest -v
 
       - name: Upload the newly built Python wheel for win_amd64 to GitHub artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.WHEEL_FILE_BASENAME }}
           path: ${{ env.WHEEL_FILE }}
