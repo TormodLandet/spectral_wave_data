@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.4.1)
 set(PROG swd_c_app_example)
 set(LIB spectral_wave_data)
 
-project(${PROG} C Fortran)
+project(${PROG} C CXX Fortran)
 
 set(DIR_SRC_API_F ../../fortran)
 set(DIR_SRC_API_C ..)
@@ -25,6 +25,7 @@ set(SRC_C_APP
 )
 
 add_library(${LIB} STATIC ${SRC_API_F})
+swd_enable_fft(${LIB})
 target_include_directories(${LIB} INTERFACE ${DIR_SRC_API_C})
 
 add_executable(${PROG} ${SRC_C_APP})

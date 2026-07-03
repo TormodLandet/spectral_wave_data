@@ -69,18 +69,18 @@ type(h2op_state), intent(out) :: op
 integer,          intent(in)  :: M_kin, nstep, nx
 real(dp),         intent(in)  :: dk, h_depth, zref
 character(len=*), intent(out) :: err_msg
-!
+
 integer  :: j, nxE
 real(dp) :: dist
-!
+
 err_msg = ''
-!
+
 ! Validate nx is a power of two
 if (nx <= 0 .or. iand(nx, nx-1) /= 0) then
     write(err_msg,'(a,i0)') 'h2op_init: nx must be a power of two, got nx=', nx
     return
 end if
-!
+
 op%M_kin   = M_kin
 op%nstep   = nstep
 op%nx      = nx
@@ -90,14 +90,14 @@ op%dk      = dk
 op%h_depth = h_depth
 op%zref    = zref
 nxE = op%nxE
-!
+
 ! Allocate spectral arrays for extended grid
 allocate(op%kE(0:nxE/2))
 allocate(op%thkhE(0:nxE/2))
 do j = 0, nxE/2
     op%kE(j) = real(j, dp) * dk
 end do
-!
+
 ! thkhE: the even-order H-operator factor tanh(k * dist)
 ! dist = h_depth + zref  (distance from sea floor to the zref level)
 if (h_depth < 0.0_dp) then
@@ -110,17 +110,17 @@ else
         op%thkhE(j) = tanh(op%kE(j) * dist)
     end do
 end if
-!
+
 ! Create FFT plans
 call fft_init(op%plan_nx, nx, err_msg)
 if (err_msg /= '') return
 call fft_init(op%plan_nxE, nxE, err_msg)
 if (err_msg /= '') return
-!
+
 allocate(op%phiE(0:nxE-1, 0:nstep-1))
 op%phiE       = 0.0_dp
 op%has_result = .false.
-!
+
 end subroutine h2op_init
 
 !==============================================================================
@@ -153,14 +153,14 @@ subroutine h2op_calc_potential(op, eta_nx, psi_nx, err_msg)
 !   Column ilayer holds the total potential (summed over M_kin orders) at the
 !   sigma-layer position sigma = 1 - (ilayer+1)/nstep on the extended grid.
 !   ilayer=0 is just below the free surface; ilayer=nstep-1 is at z=zref.
-!
+
 type(h2op_state), intent(inout) :: op
 real(dp),         intent(in)    :: eta_nx(0:), psi_nx(0:)
 character(len=*), intent(out)   :: err_msg
-!
+
 integer  :: ilayer, um, un, nxE, nhalf_E
 real(dp) :: sigma_val, this_sigma, prev_sigma
-!
+
 ! Working arrays on extended grid
 real(dp),    allocatable :: etaE(:)         ! (0:nxE-1) surface elevation
 real(dp),    allocatable :: psiE(:)         ! (0:nxE-1) surface potential
@@ -178,11 +178,11 @@ complex(dp), allocatable :: spec_phi(:)
 complex(dp), allocatable :: spec_rho(:)
 real(dp),    allocatable :: k_power(:)      ! (0:nxE/2) k^(un+1)
 integer  :: facn
-!
+
 err_msg = ''
 nxE     = op%nxE
 nhalf_E = nxE / 2
-!
+
 allocate(etaE(0:nxE-1), psiE(0:nxE-1))
 allocate(phi0E(0:nxE-1, 0:op%M_kin-1))
 allocate(phi2E(0:nxE-1, 0:op%M_kin-1))
@@ -191,25 +191,25 @@ allocate(this_h(0:nxE-1), rho_work(0:nxE-1))
 allocate(etaE_pow(0:nxE-1), height_total(0:nxE-1))
 allocate(spec_phi(0:nhalf_E), spec_rho(0:nhalf_E))
 allocate(k_power(0:nhalf_E))
-!
+
 ! Upsample eta and psi from nx to nxE
 call fft_resample_up(op%plan_nx, op%plan_nxE, eta_nx, op%nx, nxE, etaE, err_msg)
 if (err_msg /= '') return
 call fft_resample_up(op%plan_nx, op%plan_nxE, psi_nx, op%nx, nxE, psiE, err_msg)
 if (err_msg /= '') return
-!
+
 ! Total height above zref = etaE - zref
 height_total = etaE - op%zref
-!
+
 ! Initialise prev layer as free surface
 layer_h(:)   = height_total(:)   ! previous height = full wave column
 layer_psi(:) = psiE(:)           ! previous potential = surface potential
-!
+
 ! Iterate from free surface down to zref
 do ilayer = 0, op%nstep - 1
     this_sigma = 1.0_dp - real(ilayer + 1, dp) / real(op%nstep, dp)
     this_h(:)  = height_total(:) * this_sigma   ! fraction of total height
-    !
+
     if (ilayer < op%nstep - 1) then
         ! H2-operator: transfer from layer_h to this_h
         call perform_h2_operator(op, layer_psi, layer_h, this_h, &
@@ -226,106 +226,89 @@ do ilayer = 0, op%nstep - 1
         if (err_msg /= '') return
         phi2E = phi0E  ! H-op result is the final phi2E
     end if
-    !
+
     ! Dealias: zero modes above nx/2 for each M_kin layer
     do um = 0, op%M_kin - 1
         call fft_dealias(op%plan_nxE, phi2E(:, um), nxE, op%nx, err_msg)
         if (err_msg /= '') return
     end do
-    !
+
     ! Store sum over M_kin orders as the potential at this sigma level
     op%phiE(:, ilayer) = 0.0_dp
     do um = 0, op%M_kin - 1
         op%phiE(:, ilayer) = op%phiE(:, ilayer) + phi2E(:, um)
     end do
-    !
+
     ! Update for next iteration: layer position and potential
     layer_h(:)   = this_h(:)
     layer_psi(:) = op%phiE(:, ilayer)
 end do
-!
+
 op%has_result = .true.
-!
+
 deallocate(etaE, psiE, phi0E, phi2E, layer_h, layer_psi, this_h)
 deallocate(rho_work, etaE_pow, height_total)
 deallocate(spec_phi, spec_rho, k_power)
-!
+
 end subroutine h2op_calc_potential
 
 !==============================================================================
 ! h2op_convert_to_swd_layers
 !==============================================================================
 
-subroutine h2op_convert_to_swd_layers(op, eta_nx, psi_nx, &
-                                       nlayers, h_swd, c_swd, sigma_out, err_msg)
+subroutine h2op_convert_to_swd_layers(op, eta_nx, psi_nx, h_swd, c_swd, err_msg)
 ! Convert H2 results to SWD shape-7 spectral coefficients.
 !
-! Selects nlayers equally-spaced sigma levels from op%phiE plus the free surface
-! (layer 0 = sigma=1) and maps them to SWD spectral coefficient arrays.
+! Produces nlayers = nstep+1 layers with exact sigma positions
+!   sigma(m) = (m-1) / nstep,  m = 1..nstep+1
+! so sigma runs from 0.0 (zref) in steps of 1/nstep up to 1.0 (free surface).
+!
+! Layer mapping:
+!   m = 1..nstep : op%phiE(:, nstep-m) resampled from nxE to nx grid
+!   m = nstep+1  : psi_nx (free-surface potential from SWD file, no resampling needed)
 !
 ! Outputs:
-!   h_swd(0:n_swd)           : elevation spectral coefficients (from eta_nx)
-!   c_swd(0:n_swd, 1:nlayers): potential spectral coefficients per sigma layer
-!   sigma_out(1:nlayers)     : sigma positions (0=bottom..1=surface)
-!                              Layer 1 = sigma=0 (zref); layer nlayers = sigma=1 (surface)
+!   h_swd(0:n_swd)              : elevation spectral coefficients (from eta_nx)
+!   c_swd(0:n_swd, 1:nstep+1)   : potential spectral coefficients per sigma layer
 type(h2op_state), intent(in)  :: op
 real(dp),         intent(in)  :: eta_nx(0:), psi_nx(0:)
-integer,          intent(in)  :: nlayers
-complex(dp),      intent(out) :: h_swd(0:)      ! shape (0:n_swd)
-complex(dp),      intent(out) :: c_swd(0:, 1:)  ! shape (0:n_swd, 1:nlayers)
-real(dp),         intent(out) :: sigma_out(1:)  ! shape (1:nlayers)
+complex(dp),      intent(out) :: h_swd(0:)     ! (0:n_swd)
+complex(dp),      intent(out) :: c_swd(0:, 1:) ! (0:n_swd, 1:nstep+1)
 character(len=*), intent(out) :: err_msg
-!
-integer  :: m, nxE, n_swd, iH2step
+
+integer  :: m, nxE, n_swd
 real(dp), allocatable :: phi_nx(:), phi_nxE_slice(:)
-!
+
 err_msg = ''
 if (.not. op%has_result) then
     err_msg = 'h2op_convert_to_swd_layers: calc_potential has not been called'
     return
 end if
-!
+
 nxE   = op%nxE
 n_swd = op%n_swd
 allocate(phi_nx(0:op%nx-1), phi_nxE_slice(0:nxE-1))
-!
-! Elevation coefficients from eta
+
+! Elevation spectral coefficients
 call fft_real_to_swd(op%plan_nx, eta_nx, op%nx, n_swd, h_swd, err_msg)
 if (err_msg /= '') return
-!
-! Layer 1 = bottom (sigma=0, zref): use op%phiE(:, nstep-1)
-! Layer nlayers = surface (sigma=1): use psi_nx
-! Intermediate layers map to nstep steps
-!
-! Sigma positions: evenly from 0 (bottom) to 1 (surface)
-do m = 1, nlayers
-    sigma_out(m) = real(m - 1, dp) / real(nlayers - 1, dp)
-end do
-sigma_out(1)       = 0.0_dp   ! exact zero
-sigma_out(nlayers) = 1.0_dp   ! exact one
-!
-do m = 1, nlayers
-    if (m == nlayers) then
-        ! Surface layer: use psi (on original nx grid, no resample needed)
-        call fft_real_to_swd(op%plan_nx, psi_nx, op%nx, n_swd, c_swd(:, m), err_msg)
-    else
-        ! Map sigma_out(m) to the nearest H2 step index
-        ! H2 step ilayer has sigma = 1 - (ilayer+1)/nstep
-        ! => ilayer = nint((1 - sigma) * nstep) - 1, clamped to [0, nstep-1]
-        iH2step = min(max(nint((1.0_dp - sigma_out(m)) * real(op%nstep, dp)) - 1, &
-                          0), op%nstep - 1)
-        ! Resample from extended grid to original grid
-        phi_nxE_slice = op%phiE(:, iH2step)
-        call fft_resample_down(op%plan_nxE, op%plan_nx, &
-                               phi_nxE_slice, nxE, op%nx, phi_nx, err_msg)
-        if (err_msg /= '') return
-        call fft_real_to_swd(op%plan_nx, phi_nx, op%nx, n_swd, c_swd(:, m), err_msg)
-    end if
+
+! Layers m=1..nstep: phiE(:, nstep-m) is the H2-computed potential at
+! sigma=(m-1)/nstep.  nstep-m runs from nstep-1 (sigma=0) down to 0 (sigma=0.95).
+do m = 1, op%nstep
+    phi_nxE_slice = op%phiE(:, op%nstep - m)
+    call fft_resample_down(op%plan_nxE, op%plan_nx, &
+                           phi_nxE_slice, nxE, op%nx, phi_nx, err_msg)
+    if (err_msg /= '') return
+    call fft_real_to_swd(op%plan_nx, phi_nx, op%nx, n_swd, c_swd(:, m), err_msg)
     if (err_msg /= '') return
 end do
-!
+
+! Layer m=nstep+1: free-surface potential psi at sigma=1 (no resampling)
+call fft_real_to_swd(op%plan_nx, psi_nx, op%nx, n_swd, c_swd(:, op%nstep + 1), err_msg)
+
 deallocate(phi_nx, phi_nxE_slice)
-!
+
 end subroutine h2op_convert_to_swd_layers
 
 !==============================================================================
@@ -339,7 +322,11 @@ subroutine perform_h_operator(op, phi0E, etaE, &
 ! phi0E(:,0) is the input surface potential; phi0E(:,1:M_kin-1) start as zero.
 ! After the call, phi0E(:,um) holds the um-th order correction.
 !
-! Matches Python's _perform_H_operator (psiE_M[0]=psiE, psiE_M[1:]=0).
+! The Taylor expansion is: phi(z=0) = sum_{m=0}^{M-1} eta^m/m! * d^m phi/dz^m|_{z=eta}
+! Vertical derivatives are applied spectrally: d^n phi/dz^n <-> |k|^n * phi-hat,
+! with tanh(k*(h+zref)) applied for even-order terms (see amp2_free_surface_potential.rst).
+! Note: the +psiE_M[um] term from the Python reference is always zero here because
+! the calling convention sets psiE_M[um]=0 for all um>0.
 type(h2op_state), intent(in)    :: op
 real(dp),         intent(inout) :: phi0E(0:, 0:)   ! (nxE, 0:M_kin-1)
 real(dp),         intent(in)    :: etaE(0:)         ! surface elevation
@@ -374,7 +361,6 @@ do um = 1, op%M_kin - 1
         end if
         call fft_c2r(op%plan_nxE, spec_rho, rho_work, err_msg)
         if (err_msg /= '') return
-        ! phi0E(:,um) -= etaE^(un+1) * rho / facn!  (psiE_M[um]=0 for um>0)
         phi0E(:, um) = phi0E(:, um) - etaE_pow(:) * rho_work(:) / real(facn, dp)
         ! Prepare for next un iteration
         if (un < um - 1) then
@@ -397,8 +383,7 @@ subroutine perform_h2_operator(op, psi_prev, eta_prev, eta_next, &
 ! Apply the H2-operator:
 !   1. H-operator from eta_prev to z=0 -> phi0E
 !   2. Taylor expansion from z=0 to eta_next -> phi2E
-!
-! Matches Python's _perform_H2_operator.
+! See amp2_free_surface_potential.rst for the mathematical description.
 type(h2op_state), intent(in)    :: op
 real(dp),         intent(in)    :: psi_prev(0:)   ! potential at previous layer
 real(dp),         intent(in)    :: eta_prev(0:)   ! height of previous layer above zref
@@ -410,21 +395,21 @@ real(dp),         intent(inout) :: etaE_pow(0:)
 complex(dp),      intent(inout) :: spec_phi(0:), spec_rho(0:)
 real(dp),         intent(inout) :: k_power(0:)
 character(len=*), intent(out)   :: err_msg
-!
+
 integer :: um, un, j, nxE, facn
-!
+
 err_msg = ''
 nxE = op%nxE
-!
+
 ! Step 1: H-operator from eta_prev to z=0
 phi0E(:, 0) = psi_prev(:)
 call perform_h_operator(op, phi0E, eta_prev, &
                         rho_work, etaE_pow, spec_phi, spec_rho, k_power, err_msg)
 if (err_msg /= '') return
-!
+
 ! Step 2: Taylor expansion from z=0 to eta_next
 phi2E(:, :) = phi0E(:, :)   ! initialise from phi0E
-!
+
 do um = 1, op%M_kin - 1
     k_power(:)  = op%kE(:)     ! kE^1
     etaE_pow(:) = eta_next(:)  ! eta_next^1
@@ -451,7 +436,7 @@ do um = 1, op%M_kin - 1
         end if
     end do
 end do
-!
+
 end subroutine perform_h2_operator
 
 !==============================================================================

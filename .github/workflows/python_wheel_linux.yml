@@ -77,6 +77,13 @@ jobs:
           python -c "import spectral_wave_data; print(spectral_wave_data.version_full)"
           swd_meta --version
 
+      - name: Build and run Fortran FFT unit tests
+        run: |
+          cd tests/fortran/fft/Cmake
+          cmake -B build -DCMAKE_BUILD_TYPE=Release .
+          cmake --build build
+          cd build && ctest --output-on-failure
+
       - name: Test the wheel ("quick" suite of tests)
         run: |
           cd tests/python

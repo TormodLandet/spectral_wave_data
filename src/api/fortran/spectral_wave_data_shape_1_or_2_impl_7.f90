@@ -7,12 +7,15 @@ module spectral_wave_data_shape_1_or_2_impl_7_def
 ! free surface, not evaluated at z=0.
 !
 ! This implementation runs the HOSM H2-operator on the fly to transfer the
-! surface potential down to a fixed sigma-coordinate grid, then reuses the
-! shape-7 sigma-coordinate kinematics to answer queries.
+! surface potential down to a fixed sigma-coordinate grid (nstep+1 layers),
+! then reuses the shape-7 sigma-coordinate kinematics to answer queries.
 !
-! Constraints:
-!   - nx must be a power of two  (nx = 2*n where n is SWD's spectral count)
-!   - long-crested (1-D) only
+! Constraint: long-crested (1-D) only.
+!
+! Performance note: nx=2*n runs fastest when nx is a product of small primes
+! (ideally a power of two).  PocketFFT handles any size, but large prime
+! factors significantly slow down the FFT plans.  HOSM grids are practically
+! always powers of two, so this is rarely an issue in practice.
 !
 ! Reference: docs/source/amp2_free_surface_potential.rst
 
@@ -24,9 +27,10 @@ use open_swd_file_def,      only: open_swd_file, swd_validate_binary_convention,
                                   swd_magic_number
 use spectral_wave_data_def, only: spectral_wave_data
 use spectral_interpolation_def, only: spectral_interpolation
-use multilayer_long_crested_def, only: ml_state, ml_init, ml_close, ml_apply_window, &
-    ml_phi, ml_stream, ml_phi_t, ml_grad_phi, ml_elev, ml_elev_t, &
-    ml_grad_elev, ml_grad_elev_2nd, ml_pressure
+use multilayer_long_crested_def, only: multilayer_state, multilayer_init, multilayer_close, &
+    multilayer_apply_window, multilayer_phi, multilayer_stream, multilayer_phi_t, &
+    multilayer_grad_phi, multilayer_elev, multilayer_elev_t, &
+    multilayer_grad_elev, multilayer_grad_elev_2nd, multilayer_pressure
 use swd_fft_def,            only: swd_fft_plan, fft_init, fft_destroy, &
                                   fft_swd_to_real
 use hosm_h2_operator_def,   only: h2op_state, h2op_init, h2op_close, &
@@ -39,15 +43,14 @@ private
 public :: spectral_wave_data_shape_1_or_2_impl_7
 
 !==============================================================================
-! Number of H2 sigma layers: read from environment, default 20.
+! Default values for H2-operator configuration (all overridable via env vars)
 !==============================================================================
-integer, parameter :: nlayers_default = 20
-integer, parameter :: nlayers_min     = 2
-integer, parameter :: nlayers_max     = 100
+integer, parameter :: nstep_default = 20   ! default number of H2 iteration steps
+integer, parameter :: nstep_min     = 2
+integer, parameter :: nstep_max     = 100
 
-! H2 nonlinearity order and step count (hardcoded for now)
-integer, parameter :: M_kin_h2  = 5
-integer, parameter :: nstep_h2  = 20
+! M_kin: nonlinearity order (hardcoded; changing requires recompilation)
+integer, parameter :: M_kin_h2 = 5
 
 !==============================================================================
 ! The new shape class
@@ -67,10 +70,10 @@ type, extends(spectral_wave_data) :: spectral_wave_data_shape_1_or_2_impl_7
     integer  :: ipt(4,4)          ! circular-buffer column mapping
     complex(c_float), allocatable :: h_win(:,:)    ! (0:n, 4) elevation window
     complex(c_float), allocatable :: c_win(:,:,:)  ! (0:n, nlayers, 4) potential window
-    integer  :: nlayers           ! number of sigma layers used
+    integer  :: nlayers           ! total sigma layers = nstep+1
     type(spectral_interpolation) :: tpol
     !-- shared kinematics state (filled at each update_time call)
-    type(ml_state) :: st
+    type(multilayer_state) :: st
     !-- H2 operator
     type(h2op_state) :: h2op
     !-- FFT plan for n_swd<->nx conversion (plan_nx lives also in h2op, but
@@ -124,11 +127,11 @@ integer,   optional, intent(in)  :: norder
 logical,   optional, intent(in)  :: dc_bias
 type(spectral_wave_data_shape_1_or_2_impl_7) :: self
 
-integer :: i, ios, err_id, nlayers_h2
+integer :: i, ios, err_id, nstep_local
 integer(int64) :: ipos1, ipos2
 integer(c_int) :: fmt, shp, amp, n, order, nid, nsteps, nstrip
 real(c_float)  :: d_c, dk_c, dt_c, grav_c, lscale_c, magic_c
-real(c_double) :: dk64, zref64, d64
+real(c_double) :: dk64, zref64, d64, zref_env
 character(kind=c_char, len=:), allocatable :: cid
 character(kind=c_char, len=30) :: cprog
 character(kind=c_char, len=20) :: cdate
@@ -136,8 +139,9 @@ character(len=*), parameter :: err_proc = &
     'spectral_wave_data_shape_1_or_2_impl_7::constructor'
 character(len=250) :: err_msg(6)
 real(wp) :: dt_tpol, eta_min_global
-character(len=20) :: env_val
-integer  :: env_status
+character(len=30) :: env_val
+integer  :: env_status, iscan_first, iscan_last
+real(c_double) :: tmin_user, tmax_user
 complex(c_float), allocatable :: h_step(:)
 real(c_double), allocatable :: eta_nx(:)
 real(wp), allocatable :: sig(:)
@@ -214,15 +218,8 @@ else
     self%d = -1.0_wp   ! infinite depth (shape 1)
 end if
 
-! --- Validate ---
-if (iand(int(2*n), int(2*n)-1) /= 0) then
-    write(err_msg(1),'(a,a)') 'SWD file: ', trim(self%file)
-    write(err_msg(2),'(a,i0,a)') 'nx = 2*n = ', 2*n, ' is not a power of two.'
-    err_msg(3) = 'amp=2 with lazy H2 requires nx to be a power of two.'
-    call self%error%set_id_msg(err_proc, 1004, err_msg(1:3))
-    return
-end if
-
+! Performance note: nx = 2*n runs fastest when nx is a product of small primes.
+! See module header for details.
 self%nx    = 2 * int(n)
 dk64       = real(dk_c, c_double)
 self%dk_val = real(dk64, wp)
@@ -247,17 +244,19 @@ else
     self%nsumx = int(n)
 end if
 
-! Number of H2 sigma layers (from environment or default)
-call get_environment_variable('SWD_NUM_H2_LAYERS', env_val, status=env_status)
+! Number of H2 steps (from SWD_NUM_H2_STEPS env var or default).
+! nlayers = nstep+1: one layer per H2 step (sigma 0..0.95) plus the
+! free-surface layer at sigma=1.
+call get_environment_variable('SWD_NUM_H2_STEPS', env_val, status=env_status)
 if (env_status == 0) then
-    read(env_val, *, iostat=ios) nlayers_h2
-    if (ios /= 0 .or. nlayers_h2 < nlayers_min .or. nlayers_h2 > nlayers_max) then
-        nlayers_h2 = nlayers_default
+    read(env_val, *, iostat=ios) nstep_local
+    if (ios /= 0 .or. nstep_local < nstep_min .or. nstep_local > nstep_max) then
+        nstep_local = nstep_default
     end if
 else
-    nlayers_h2 = nlayers_default
+    nstep_local = nstep_default
 end if
-self%nlayers = nlayers_h2
+self%nlayers = nstep_local + 1
 
 ! --- Temporal interpolation ---
 dt_tpol = self%dt
@@ -288,70 +287,116 @@ end if
 ! --- FFT plan for nx (used in eta-prepass and swd-coefficient conversion) ---
 call fft_init(self%plan_nx_prepass, self%nx, err_msg(1))
 if (err_msg(1) /= '') then
-    call self%error%set_id_msg(err_proc, 1005, err_msg(1:1))
+    call self%error%set_id_msg(err_proc, 1006, err_msg(1:1))
     return
 end if
 
-! --- Eta-prepass: scan all timesteps to find global eta_min for fixed zref ---
-inquire(self%unit, pos=self%ipos0)
+! --- Determine zref ---
+! SWD_H2_ZREF: positive (or unset) => compute zref from eta_min prepass;
+!              negative             => use the value directly, skip the prepass.
+call get_environment_variable('SWD_H2_ZREF', env_val, status=env_status)
+zref_env = 1.0_c_double   ! positive sentinel: compute from eta_min
+if (env_status == 0) then
+    read(env_val, *, iostat=ios) zref_env
+    if (ios /= 0) zref_env = 1.0_c_double
+end if
 
-! Allocate scratch and measure step size from the first timestep
-allocate(h_step(0:int(n)))
-allocate(eta_nx(0:self%nx-1))
-ipos1 = self%ipos0
-read(self%unit, pos=ipos1, end=98, err=99) h_step(:)         ! h(0:n)
-read(self%unit, end=98, err=99) h_step(:)                    ! ht(0:n)
-read(self%unit, end=98, err=99) h_step(:)                    ! c(0:n)
-read(self%unit, end=98, err=99) h_step(:)                    ! ct(0:n)
-inquire(self%unit, pos=ipos2)
-self%size_complex = (ipos2 - ipos1) / (4 * (int(n) + 1))
-self%size_step    = ipos2 - ipos1
+d64 = real(self%d, c_double)
 
-! Now scan all timesteps for eta_min
-eta_min_global = 0.0_wp
+if (zref_env > 0.0_c_double) then
+    ! --- Eta-prepass: scan timestep range to find global eta_min ---
+    inquire(self%unit, pos=self%ipos0)
 
-do i = 0, int(nsteps) - 1
-    ! Seek to h(0:n) of step i
-    read(self%unit, pos = self%ipos0 + int(i, int64)*self%size_step, &
-         end=98, err=99) h_step(:)
-    ! Convert to real-space eta on nx grid
-    call fft_swd_to_real(self%plan_nx_prepass, &
-                         cmplx(h_step(:), kind=c_double), &
-                         int(n), self%nx, eta_nx, err_msg(1))
-    if (err_msg(1) /= '') then
-        call self%error%set_id_msg(err_proc, 1005, err_msg(1:1))
-        return
+    ! Allocate scratch and measure step size from the first timestep
+    allocate(h_step(0:int(n)))
+    allocate(eta_nx(0:self%nx-1))
+    ipos1 = self%ipos0
+    read(self%unit, pos=ipos1, end=98, err=99) h_step(:)    ! h(0:n)
+    read(self%unit, end=98, err=99) h_step(:)               ! ht(0:n)
+    read(self%unit, end=98, err=99) h_step(:)               ! c(0:n)
+    read(self%unit, end=98, err=99) h_step(:)               ! ct(0:n)
+    inquire(self%unit, pos=ipos2)
+    self%size_complex = (ipos2 - ipos1) / (4 * (int(n) + 1))
+    self%size_step    = ipos2 - ipos1
+
+    ! Scan range: default all steps; narrow if SWD_WINDOW_TMIN/TMAX are set.
+    iscan_first = 0
+    iscan_last  = int(nsteps) - 1
+    call get_environment_variable('SWD_WINDOW_TMIN', env_val, status=env_status)
+    if (env_status == 0) then
+        read(env_val, *, iostat=ios) tmin_user
+        if (ios == 0) iscan_first = max(0, &
+            int((real(self%t0, c_double) + tmin_user) / real(self%dt, c_double)) - 1)
     end if
-    if (i == 0 .or. minval(eta_nx) < eta_min_global) then
-        eta_min_global = minval(eta_nx)
+    call get_environment_variable('SWD_WINDOW_TMAX', env_val, status=env_status)
+    if (env_status == 0) then
+        read(env_val, *, iostat=ios) tmax_user
+        if (ios == 0) iscan_last = min(int(nsteps) - 1, &
+            int((real(self%t0, c_double) + tmax_user) / real(self%dt, c_double)) + 2)
     end if
-end do
 
-! Compute zref: as 1.2 * eta_min
-! Note: the Python code used for reference rounds the zref value for nicer debug 
-! prints, but any floating point value is equally good for us here
-d64   = real(self%d, c_double)
-zref64 = 1.2_c_double * eta_min_global
+    eta_min_global = 0.0_wp
+    do i = iscan_first, iscan_last
+        read(self%unit, pos = self%ipos0 + int(i, int64)*self%size_step, &
+             end=98, err=99) h_step(:)
+        call fft_swd_to_real(self%plan_nx_prepass, &
+                             cmplx(h_step(:), kind=c_double), &
+                             int(n), self%nx, eta_nx, err_msg(1))
+        if (err_msg(1) /= '') then
+            call self%error%set_id_msg(err_proc, 1006, err_msg(1:1))
+            return
+        end if
+        if (i == iscan_first .or. minval(eta_nx) < eta_min_global) then
+            eta_min_global = minval(eta_nx)
+        end if
+    end do
 
-! Clamp: zref must satisfy d + zref > 0 for finite depth
+    ! zref = 1.2 * eta_min (no rounding; any floating-point value is fine).
+    ! The factor 1.2 provides a safety margin below the deepest trough.
+    zref64 = 1.2_c_double * eta_min_global
+    deallocate(eta_nx)
+else
+    ! Explicit zref from env var: skip the prepass scan entirely.
+    zref64 = zref_env
+    ! Measure step size (needed even without the prepass)
+    inquire(self%unit, pos=self%ipos0)
+    allocate(h_step(0:int(n)))
+    ipos1 = self%ipos0
+    read(self%unit, pos=ipos1, end=98, err=99) h_step(:)
+    read(self%unit, end=98, err=99) h_step(:)
+    read(self%unit, end=98, err=99) h_step(:)
+    read(self%unit, end=98, err=99) h_step(:)
+    inquire(self%unit, pos=ipos2)
+    self%size_complex = (ipos2 - ipos1) / (4 * (int(n) + 1))
+    self%size_step    = ipos2 - ipos1
+end if
+
+! Clamp zref to be physically valid.
+! For shape 2: zref must satisfy d + zref > 0 (cannot be below or at the seabed).
 if (d64 > 0.0_c_double) then
     if (zref64 <= -d64) then
-        zref64 = -d64 + 1.0e-4_c_double * d64   ! seabed clamp: just above -d
+        if (zref_env <= 0.0_c_double) then
+            ! Explicit value is invalid: report an error instead of silently clamping.
+            write(err_msg(1),'(a,f0.4,a,f0.4)') &
+                'SWD_H2_ZREF = ', zref_env, ' violates d + zref > 0 for depth d = ', d64
+            call self%error%set_id_msg(err_proc, 1004, err_msg(1:1))
+            return
+        end if
+        ! Prepass-derived value: clamp just above the seabed.
+        zref64 = -d64 + 1.0e-4_c_double * d64
     end if
 end if
-! zref must be <= 0 (shape-7 convention)
+! zref must be <= 0 (sigma convention: sigma=0 at zref, sigma=1 at free surface).
 if (zref64 > 0.0_c_double) zref64 = 0.0_c_double
 
 self%zref = real(zref64, wp)
 
-deallocate(eta_nx)
-
 ! --- Initialise H2 operator ---
-call h2op_init(self%h2op, M_kin=M_kin_h2, nstep=nstep_h2, nx=self%nx, &
+call h2op_init(self%h2op, M_kin=M_kin_h2, nstep=nstep_local, nx=self%nx, &
                dk=real(dk64, c_double), h_depth=d64, zref=real(zref64, c_double), &
                err_msg=err_msg(1))
 if (err_msg(1) /= '') then
-    call self%error%set_id_msg(err_proc, 1005, err_msg(1:1))
+    call self%error%set_id_msg(err_proc, 1006, err_msg(1:1))
     return
 end if
 
@@ -367,30 +412,31 @@ end if
 self%h_win = cmplx(0.0_c_float, 0.0_c_float, c_float)
 self%c_win = cmplx(0.0_c_float, 0.0_c_float, c_float)
 
-! --- Build sigma layer positions (uniform 0..1) ---
-allocate(sig(nlayers_h2))
-do i = 1, nlayers_h2
-    sig(i) = real(i - 1, wp) / real(nlayers_h2 - 1, wp)
+! --- Build sigma layer positions ---
+! sigma(m) = (m-1)/nstep for m=1..nstep+1, matching h2op_convert_to_swd_layers.
+allocate(sig(self%nlayers))
+do i = 1, self%nlayers
+    sig(i) = real(i - 1, wp) / real(nstep_local, wp)
 end do
-sig(1)          = 0.0_wp
-sig(nlayers_h2) = 1.0_wp
+sig(1)           = 0.0_wp
+sig(self%nlayers) = 1.0_wp
 
-! tanhdkd_eff for ml_state (shape-2 below-zref extrapolation)
+! tanhdkd_eff for multilayer_state (shape-2 below-zref extrapolation)
 if (self%d > 0.0_wp) then
     tanhdkd_eff_wp = tanh(self%dk_val * (self%d + self%zref))
 else
     tanhdkd_eff_wp = 1.0_wp
 end if
 
-! --- Initialise the shared ml_state ---
-call ml_init(self%st, &
+! --- Initialise the shared multilayer_state ---
+call multilayer_init(self%st, &
     n           = self%n,          &
     nsumx       = self%nsumx,      &
     dk          = self%dk_val,     &
     d           = self%d,          &
     zref        = self%zref,       &
     tanhdkd_eff = tanhdkd_eff_wp,  &
-    nlayers     = nlayers_h2,      &
+    nlayers     = self%nlayers,    &
     sig         = sig,             &
     cbeta       = self%cbeta,      &
     sbeta       = self%sbeta,      &
@@ -431,7 +477,7 @@ class(spectral_wave_data_shape_1_or_2_impl_7) :: self
 logical :: opened
 inquire(unit=self%unit, opened=opened)
 if (opened) close(self%unit)
-call ml_close(self%st)
+call multilayer_close(self%st)
 call h2op_close(self%h2op)
 call fft_destroy(self%plan_nx_prepass)
 if (allocated(self%cid))   deallocate(self%cid)
@@ -521,7 +567,7 @@ associate(h => self%h_win, c => self%c_win, ic => self%icur, ip => self%ipt)
                                     h2_err)
             if (h2_err /= '') then
                 err_msg(1) = h2_err
-                call self%error%set_id_msg(err_proc, 1005, err_msg(1:1))
+                call self%error%set_id_msg(err_proc, 1006, err_msg(1:1))
                 deallocate(h_file, c_file)
                 return
             end if
@@ -536,8 +582,8 @@ associate(h => self%h_win, c => self%c_win, ic => self%icur, ip => self%ipt)
         call do_pad_left(self, h, c, ip(:,ic), dt2, fval, dfval)
     end if
 
-    ! Apply the 4-step temporal window to fill ml_state h_cur/ht_cur/c_cur/ct_cur
-    call ml_apply_window(self%st, &
+    ! Apply the 4-step temporal window to fill multilayer_state h_cur/ht_cur/c_cur/ct_cur
+    call multilayer_apply_window(self%st, &
         h_win=h, c_win=c, tpol=self%tpol, &
         i1=ip(1,ic), i2=ip(2,ic), i3=ip(3,ic), i4=ip(4,ic), &
         delta=delta, dt=real(self%dt, wp))
@@ -559,10 +605,7 @@ character(len=*), intent(out)   :: err_msg
 
 real(c_double), allocatable :: eta_nx(:), psi_nx(:)
 complex(c_double), allocatable :: h_swd_layer(:), c_swd_layer(:,:)
-real(c_double), allocatable :: sigma_layer(:)
-integer  :: ios
 integer(int64) :: ipos_step
-character(len=*), parameter :: err_proc = 'generate_h2_column'
 
 err_msg = ''
 
@@ -593,26 +636,26 @@ if (err_msg /= '') return
 call h2op_calc_potential(self%h2op, eta_nx, psi_nx, err_msg)
 if (err_msg /= '') return
 
-! Convert H2 results to SWD shape-7 spectral coefficients
+! Convert H2 results to SWD shape-7 spectral coefficients.
+! nlayers = h2op%nstep+1; exact sigma positions (m-1)/nstep, m=1..nlayers.
 allocate(h_swd_layer(0:self%n))
-allocate(c_swd_layer(0:self%n, 1:self%nlayers))
-allocate(sigma_layer(1:self%nlayers))
+allocate(c_swd_layer(0:self%n, 1:self%h2op%nstep + 1))
 
 call h2op_convert_to_swd_layers(self%h2op, eta_nx, psi_nx, &
-    self%nlayers, h_swd_layer, c_swd_layer, sigma_layer, err_msg)
+    h_swd_layer, c_swd_layer, err_msg)
 if (err_msg /= '') return
 
 ! Store in window (downcast to c_float for storage)
 self%h_win(:, ic_col) = cmplx(h_swd_layer(:), kind=c_float)
 self%c_win(:, :, ic_col) = cmplx(c_swd_layer(:,:), kind=c_float)
 
-deallocate(eta_nx, psi_nx, h_swd_layer, c_swd_layer, sigma_layer)
+deallocate(eta_nx, psi_nx, h_swd_layer, c_swd_layer)
 return
 98 continue
-err_msg = 'End of file when reading data for H2 generation from: ' // trim(self%file)
+err_msg = 'End of file when reading H2 data from: ' // trim(self%file)
 return
 99 continue
-err_msg = 'Error when reading data for H2 generation from: ' // trim(self%file)
+err_msg = 'Error when reading H2 data from: ' // trim(self%file)
 end subroutine generate_h2_column
 
 !==============================================================================
@@ -690,28 +733,28 @@ function phi(self, x, y, z) result(res)
 class(spectral_wave_data_shape_1_or_2_impl_7), intent(in) :: self
 real(knd), intent(in) :: x, y, z
 real(knd) :: res
-res = ml_phi(self%st, x, y, z)
+res = multilayer_phi(self%st, x, y, z)
 end function phi
 
 function stream(self, x, y, z) result(res)
 class(spectral_wave_data_shape_1_or_2_impl_7), intent(in) :: self
 real(knd), intent(in) :: x, y, z
 real(knd) :: res
-res = ml_stream(self%st, x, y, z)
+res = multilayer_stream(self%st, x, y, z)
 end function stream
 
 function phi_t(self, x, y, z) result(res)
 class(spectral_wave_data_shape_1_or_2_impl_7), intent(in) :: self
 real(knd), intent(in) :: x, y, z
 real(knd) :: res
-res = ml_phi_t(self%st, x, y, z)
+res = multilayer_phi_t(self%st, x, y, z)
 end function phi_t
 
 function grad_phi(self, x, y, z) result(res)
 class(spectral_wave_data_shape_1_or_2_impl_7), intent(in) :: self
 real(knd), intent(in) :: x, y, z
 real(knd) :: res(3)
-res = ml_grad_phi(self%st, x, y, z)
+res = multilayer_grad_phi(self%st, x, y, z)
 end function grad_phi
 
 function grad_phi_2nd(self, x, y, z) result(res)
@@ -739,35 +782,35 @@ function elev(self, x, y) result(res)
 class(spectral_wave_data_shape_1_or_2_impl_7), intent(in) :: self
 real(knd), intent(in) :: x, y
 real(knd) :: res
-res = ml_elev(self%st, x, y)
+res = multilayer_elev(self%st, x, y)
 end function elev
 
 function elev_t(self, x, y) result(res)
 class(spectral_wave_data_shape_1_or_2_impl_7), intent(in) :: self
 real(knd), intent(in) :: x, y
 real(knd) :: res
-res = ml_elev_t(self%st, x, y)
+res = multilayer_elev_t(self%st, x, y)
 end function elev_t
 
 function grad_elev(self, x, y) result(res)
 class(spectral_wave_data_shape_1_or_2_impl_7), intent(in) :: self
 real(knd), intent(in) :: x, y
 real(knd) :: res(3)
-res = ml_grad_elev(self%st, x, y)
+res = multilayer_grad_elev(self%st, x, y)
 end function grad_elev
 
 function grad_elev_2nd(self, x, y) result(res)
 class(spectral_wave_data_shape_1_or_2_impl_7), intent(in) :: self
 real(knd), intent(in) :: x, y
 real(knd) :: res(3)
-res = ml_grad_elev_2nd(self%st, x, y)
+res = multilayer_grad_elev_2nd(self%st, x, y)
 end function grad_elev_2nd
 
 function pressure(self, x, y, z) result(res)
 class(spectral_wave_data_shape_1_or_2_impl_7), intent(in) :: self
 real(knd), intent(in) :: x, y, z
 real(knd) :: res
-res = ml_pressure(self%st, x, y, z)
+res = multilayer_pressure(self%st, x, y, z)
 end function pressure
 
 function bathymetry(self, x, y) result(res)

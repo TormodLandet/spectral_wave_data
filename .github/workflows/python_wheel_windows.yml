@@ -192,6 +192,14 @@ jobs:
           cd tests\python
           dumpbin /dependents .venv\Lib\site-packages\spectral_wave_data\SpectralWaveData.dll
 
+      - name: Build and run Fortran FFT unit tests
+        shell: cmd
+        run: |
+          cd tests\fortran\fft\Cmake
+          cmake -B build -DCMAKE_BUILD_TYPE=Release .
+          cmake --build build --config Release
+          cd build && ctest -C Release --output-on-failure
+
       - name: Test the installed wheel
         shell: powershell
         run: |

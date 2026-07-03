@@ -166,6 +166,25 @@ order :math:`q` we apply the following Taylor expansion above the calm free surf
 .. math::
    Z_j(z) = 1 + \sum_{p=1}^{q-1}\frac{(k_j z)^p}{p!}, \qquad z > 0
 
+
+Free-surface potential (``amp=2``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When the file is written with ``amp=2`` the stored :math:`c_j(t)` coefficients represent
+the velocity potential **evaluated at the instantaneous free surface** rather than the
+linear-theory value at :math:`z=0`:
+
+.. math::
+
+   \psi(x,t) = \phi(x,\,\zeta(x,t),\,t)
+   = \sum_{j=0}^n \mathcal{Re}\Bigl\{c_j(t)\, X_j(x)\Bigr\}
+
+Note the absence of the depth factor :math:`Z_j(z) = e^{k_j z}`.  Sub-surface kinematics
+are **not** computed via the linear :math:`Z_j(z)` propagation; instead, the library runs
+the H2 operator at each requested time step to transfer :math:`\psi` down to a
+sigma-coordinate grid, then evaluates the kinematics from that grid.
+See :doc:`amp2_free_surface_potential` for a complete description.
+
 .. seealso::
 
    :doc:`amp2_free_surface_potential`

@@ -2,11 +2,11 @@ module multilayer_long_crested_def
 
 ! Shared sigma-coordinate kinematics and temporal-window application for
 ! multilayer long-crested wave shapes.
-!
-! The ml_state type holds all quantities needed for kinematic evaluation at
-! the current time step.  It is filled by ml_apply_window after the owning
+
+! The multilayer_state type holds all quantities needed for kinematic evaluation at
+! the current time step.  It is filled by multilayer_apply_window after the owning
 ! shape class has assembled the four-step spectral window.
-!
+
 ! Used by:
 !   - spectral_wave_data_shape_7_impl_1  (file-backed sigma-coordinate waves)
 !   - spectral_wave_data_shape_1_or_2_impl_7  (amp=2, H2-operator generated)
@@ -24,14 +24,14 @@ private
 !
 !##############################################################################
 
-public :: ml_state         ! State type (current-time kinematics data)
-public :: ml_init          ! Allocate and initialise ml_state
-public :: ml_close         ! Deallocate ml_state
-public :: ml_apply_window  ! Fill h_cur/ht_cur/c_cur/ct_cur from 4-step window
+public :: multilayer_state         ! State type (current-time kinematics data)
+public :: multilayer_init          ! Allocate and initialise multilayer_state
+public :: multilayer_close         ! Deallocate multilayer_state
+public :: multilayer_apply_window  ! Fill h_cur/ht_cur/c_cur/ct_cur from 4-step window
 
 ! Kinematics  (match the spectral_wave_data abstract interface signatures)
-public :: ml_elev, ml_elev_t, ml_grad_elev, ml_grad_elev_2nd
-public :: ml_phi, ml_stream, ml_phi_t, ml_grad_phi, ml_pressure
+public :: multilayer_elev, multilayer_elev_t, multilayer_grad_elev, multilayer_grad_elev_2nd
+public :: multilayer_phi, multilayer_stream, multilayer_phi_t, multilayer_grad_phi, multilayer_pressure
 
 !##############################################################################
 !
@@ -42,7 +42,7 @@ public :: ml_phi, ml_stream, ml_phi_t, ml_grad_phi, ml_pressure
 !------------------------------------------------------------------------------
 ! State type
 !------------------------------------------------------------------------------
-type :: ml_state
+type :: multilayer_state
     integer  :: n              ! Highest spectral index (n+1 components, j=0..n)
     integer  :: nsumx          ! Number of components used in summation (<=n)
     real(wp) :: dk             ! Wavenumber spacing
@@ -62,7 +62,7 @@ type :: ml_state
     complex(wp), allocatable :: ht_cur(:)   ! (0:n)  d/dt elevation
     complex(wp), allocatable :: c_cur(:,:)  ! (0:n, 1:nlayers) potential
     complex(wp), allocatable :: ct_cur(:,:) ! (0:n, 1:nlayers) d/dt potential
-end type ml_state
+end type multilayer_state
 
 contains
 
@@ -70,16 +70,16 @@ contains
 ! Construction / destruction
 !==============================================================================
 
-subroutine ml_init(st, n, nsumx, dk, d, zref, tanhdkd_eff, nlayers, sig, &
+subroutine multilayer_init(st, n, nsumx, dk, d, zref, tanhdkd_eff, nlayers, sig, &
                    cbeta, sbeta, x0, grav, rho, dc_bias)
-! Allocate and initialise an ml_state from scalar parameters.
-type(ml_state), intent(out) :: st
+! Allocate and initialise an multilayer_state from scalar parameters.
+type(multilayer_state), intent(out) :: st
 integer,  intent(in) :: n, nsumx, nlayers
 real(wp), intent(in) :: dk, d, zref, tanhdkd_eff
 real(wp), intent(in) :: sig(nlayers)
 real(wp), intent(in) :: cbeta, sbeta, x0, grav, rho
 logical,  intent(in) :: dc_bias
-!
+
 st%n           = n
 st%nsumx       = nsumx
 st%dk          = dk
@@ -101,15 +101,15 @@ st%h_cur  = cmplx(0.0_wp, 0.0_wp, wp)
 st%ht_cur = cmplx(0.0_wp, 0.0_wp, wp)
 st%c_cur  = cmplx(0.0_wp, 0.0_wp, wp)
 st%ct_cur = cmplx(0.0_wp, 0.0_wp, wp)
-!
-end subroutine ml_init
+
+end subroutine multilayer_init
 
 !==============================================================================
 
-subroutine ml_close(st)
-! Deallocate an ml_state.
-type(ml_state), intent(inout) :: st
-!
+subroutine multilayer_close(st)
+! Deallocate an multilayer_state.
+type(multilayer_state), intent(inout) :: st
+
 if (allocated(st%sig))    deallocate(st%sig)
 if (allocated(st%h_cur))  deallocate(st%h_cur)
 if (allocated(st%ht_cur)) deallocate(st%ht_cur)
@@ -118,14 +118,14 @@ if (allocated(st%ct_cur)) deallocate(st%ct_cur)
 st%n       = 0
 st%nsumx   = 0
 st%nlayers = 0
-!
-end subroutine ml_close
+
+end subroutine multilayer_close
 
 !==============================================================================
 ! Window application
 !==============================================================================
 
-subroutine ml_apply_window(st, h_win, c_win, tpol, i1, i2, i3, i4, delta, dt)
+subroutine multilayer_apply_window(st, h_win, c_win, tpol, i1, i2, i3, i4, delta, dt)
 ! Fill st%h_cur / st%ht_cur / st%c_cur / st%ct_cur from a four-step spectral
 ! window using 2nd-order finite-difference time derivatives + tpol interpolation.
 !
@@ -135,20 +135,20 @@ subroutine ml_apply_window(st, h_win, c_win, tpol, i1, i2, i3, i4, delta, dt)
 !   i4 = column index for t_(i+2)
 !   delta = (tswd - t_i) / dt   in [0, 1)
 !   dt    = SWD time step
-type(ml_state),               intent(inout) :: st
+type(multilayer_state),               intent(inout) :: st
 complex(c_float),             intent(in)    :: h_win(0:, :)      ! (0:n, 4)
 complex(c_float),             intent(in)    :: c_win(0:, :, :)   ! (0:n, 1:nlayers, 4)
 type(spectral_interpolation), intent(in)    :: tpol
 integer,  intent(in) :: i1, i2, i3, i4
 real(wp), intent(in) :: delta, dt
-!
+
 integer  :: i, m
 real(wp) :: dt2
 complex(wp) :: fval, dfval
 complex(wp), parameter :: czero = cmplx(0.0_wp, 0.0_wp, wp)
-!
+
 dt2 = 2.0_wp * dt
-!
+
 ! Elevation h_cur / ht_cur
 do concurrent (i = 0 : st%nsumx)
     call tpol%scheme(delta,                                                      &
@@ -162,7 +162,7 @@ do concurrent (i = 0 : st%nsumx)
          + 3.0_wp*cmplx(h_win(i,i4),kind=wp)) / dt2,                           &
         st%h_cur(i), st%ht_cur(i))
 end do
-!
+
 ! Potential c_cur / ct_cur (all sigma layers)
 do m = 1, st%nlayers
     do concurrent (i = 0 : st%nsumx)
@@ -178,7 +178,7 @@ do m = 1, st%nlayers
             st%c_cur(i,m), st%ct_cur(i,m))
     end do
 end do
-!
+
 ! DC-bias suppression
 if (.not. st%dc_bias) then
     st%h_cur(0)    = czero
@@ -186,8 +186,8 @@ if (.not. st%dc_bias) then
     st%c_cur(0,:)  = czero
     st%ct_cur(0,:) = czero
 end if
-!
-end subroutine ml_apply_window
+
+end subroutine multilayer_apply_window
 
 !==============================================================================
 ! Private helpers
@@ -195,14 +195,14 @@ end subroutine ml_apply_window
 
 subroutine calc_elev_and_slope(st, xswd, eta, zeta_x, zeta_t)
 ! Compute wave elevation, its x-derivative and its Euler d/dt at xswd.
-type(ml_state), intent(in)  :: st
+type(multilayer_state), intent(in)  :: st
 real(wp),       intent(in)  :: xswd
 real(wp),       intent(out) :: eta, zeta_x, zeta_t
-!
+
 integer  :: j
 real(wp) :: kval
 complex(wp) :: kappa1, Xfun
-!
+
 kappa1 = exp(cmplx(0.0_wp, -st%dk * xswd, kind=wp))
 Xfun   = 1.0_wp
 eta    = st%h_cur(0) % re
@@ -216,7 +216,7 @@ do j = 1, st%nsumx
     zeta_x = zeta_x + kval * aimag(st%h_cur(j) * Xfun)
     zeta_t = zeta_t + real(st%ht_cur(j) * Xfun)
 end do
-!
+
 end subroutine calc_elev_and_slope
 
 !==============================================================================
@@ -226,14 +226,14 @@ subroutine depth_Zfun(st, kval, z_prime, Zfun, Zfun_z, Rfun)
 ! extrapolation.  z_prime = z - zref (<= 0).
 ! Rfun carries the Rfun recursion state; caller must initialise to 0.0
 ! before the j=1..nsumx loop and pass it unchanged between calls.
-type(ml_state), intent(in)    :: st
+type(multilayer_state), intent(in)    :: st
 real(wp),       intent(in)    :: kval, z_prime
 real(wp),       intent(inout) :: Rfun
 real(wp),       intent(out)   :: Zfun, Zfun_z
-!
+
 real(wp) :: kappa2, kappa3, Sfun, Tfun, Ufun, Vfun
 real(wp), parameter :: Rfun_eps = 100.0_wp * epsilon(1.0_wp)
-!
+
 kappa2 = exp( kval * z_prime)
 kappa3 = 1.0_wp / kappa2
 Sfun   = kappa2
@@ -254,7 +254,7 @@ else
         Zfun_z = kval * (Ufun * Sfun - Vfun * Tfun)
     end if
 end if
-!
+
 end subroutine depth_Zfun
 
 !==============================================================================
@@ -262,16 +262,16 @@ end subroutine depth_Zfun
 subroutine interp_sigma(st, xswd, sigma_eval, phi_val, u_val, dphi_dsigma, c_arr)
 ! Piecewise-linear sigma-layer interpolation of phi and u_x at sigma_eval.
 ! c_arr is either st%c_cur or st%ct_cur: assumed shape (0:, 1:).
-type(ml_state), intent(in)  :: st
+type(multilayer_state), intent(in)  :: st
 real(wp),       intent(in)  :: xswd, sigma_eval
 real(wp),       intent(out) :: phi_val, u_val, dphi_dsigma
 complex(wp),    intent(in)  :: c_arr(0:, 1:)
-!
+
 integer  :: j, m, m1, m2
 real(wp) :: kval, s, dsigma
 real(wp) :: phi_m(st%nlayers), u_m(st%nlayers)
 complex(wp) :: kappa1, Xfun, cx
-!
+
 kappa1 = exp(cmplx(0.0_wp, -st%dk * xswd, kind=wp))
 phi_m  = 0.0_wp
 u_m    = 0.0_wp
@@ -304,25 +304,25 @@ s           = (sigma_eval - st%sig(m1)) / dsigma
 phi_val     = phi_m(m1) + s * (phi_m(m2) - phi_m(m1))
 u_val       = u_m(m1)   + s * (u_m(m2)   - u_m(m1))
 dphi_dsigma = (phi_m(m2) - phi_m(m1)) / dsigma
-!
+
 end subroutine interp_sigma
 
 !==============================================================================
 ! Kinematic functions
 !==============================================================================
 
-function ml_phi(st, x, y, z) result(res)
-type(ml_state), intent(in) :: st
+function multilayer_phi(st, x, y, z) result(res)
+type(multilayer_state), intent(in) :: st
 real(knd), intent(in) :: x, y, z
 real(knd)             :: res
-!
+
 integer  :: j
 real(wp) :: xswd, eta, zeta_x, zeta_t, z_prime, kval, Rfun, Zfun, Zfun_z
 real(wp) :: sigma_eval, phi_val, u_val, dphi_dsigma
 complex(wp) :: kappa1, Xfun, cx
-!
+
 xswd = st%x0 + real(x,wp) * st%cbeta + real(y,wp) * st%sbeta
-!
+
 if (real(z,wp) >= st%zref) then
     call calc_elev_and_slope(st, xswd, eta, zeta_x, zeta_t)
     sigma_eval = min(max((real(z,wp) - st%zref) / (eta - st%zref), 0.0_wp), 1.0_wp)
@@ -344,34 +344,34 @@ else
         res = res + cx % re * Zfun
     end do
 end if
-!
-end function ml_phi
+
+end function multilayer_phi
 
 !==============================================================================
 
-function ml_stream(st, x, y, z) result(res)
-type(ml_state), intent(in) :: st
+function multilayer_stream(st, x, y, z) result(res)
+type(multilayer_state), intent(in) :: st
 real(knd), intent(in) :: x, y, z
 real(knd)             :: res
-!
+
 res = 0.0_knd
-!
-end function ml_stream
+
+end function multilayer_stream
 
 !==============================================================================
 
-function ml_phi_t(st, x, y, z) result(res)
-type(ml_state), intent(in) :: st
+function multilayer_phi_t(st, x, y, z) result(res)
+type(multilayer_state), intent(in) :: st
 real(knd), intent(in) :: x, y, z
 real(knd)             :: res
-!
+
 integer  :: j
 real(wp) :: xswd, eta, zeta_x, zeta_t, z_prime, kval, Rfun, Zfun, Zfun_z
 real(wp) :: sigma_eval, phi_t_sig, phi_val, u_val, dphi_dsigma, H
 complex(wp) :: kappa1, Xfun
-!
+
 xswd = st%x0 + real(x,wp) * st%cbeta + real(y,wp) * st%sbeta
-!
+
 if (real(z,wp) >= st%zref) then
     call calc_elev_and_slope(st, xswd, eta, zeta_x, zeta_t)
     H = eta - st%zref
@@ -396,23 +396,23 @@ else
         res  = res + real(st%ct_cur(j,1) * Xfun) * Zfun
     end do
 end if
-!
-end function ml_phi_t
+
+end function multilayer_phi_t
 
 !==============================================================================
 
-function ml_grad_phi(st, x, y, z) result(res)
-type(ml_state), intent(in) :: st
+function multilayer_grad_phi(st, x, y, z) result(res)
+type(multilayer_state), intent(in) :: st
 real(knd), intent(in) :: x, y, z
 real(knd)             :: res(3)
-!
+
 integer  :: j
 real(wp) :: xswd, eta, zeta_x, zeta_t, z_prime, kval, Rfun, Zfun, Zfun_z
 real(wp) :: sigma_eval, phi_val, u_val, dphi_dsigma, H
 complex(wp) :: kappa1, Xfun, cx
-!
+
 xswd = st%x0 + real(x,wp) * st%cbeta + real(y,wp) * st%sbeta
-!
+
 if (real(z,wp) >= st%zref) then
     call calc_elev_and_slope(st, xswd, eta, zeta_x, zeta_t)
     H = eta - st%zref
@@ -439,20 +439,20 @@ else
     res(2) = res(1) * st%sbeta
     res(1) = res(1) * st%cbeta
 end if
-!
-end function ml_grad_phi
+
+end function multilayer_grad_phi
 
 !==============================================================================
 
-function ml_elev(st, x, y) result(res)
-type(ml_state), intent(in) :: st
+function multilayer_elev(st, x, y) result(res)
+type(multilayer_state), intent(in) :: st
 real(knd), intent(in) :: x, y
 real(knd)             :: res
-!
+
 integer  :: j
 real(wp) :: xswd
 complex(wp) :: kappa1, Xfun
-!
+
 xswd   = st%x0 + real(x,wp) * st%cbeta + real(y,wp) * st%sbeta
 kappa1 = exp(cmplx(0.0_wp, -st%dk * xswd, kind=wp))
 Xfun   = 1.0_wp
@@ -461,20 +461,20 @@ do j = 1, st%nsumx
     Xfun = kappa1 * Xfun
     res  = res + real(st%h_cur(j) * Xfun)
 end do
-!
-end function ml_elev
+
+end function multilayer_elev
 
 !==============================================================================
 
-function ml_elev_t(st, x, y) result(res)
-type(ml_state), intent(in) :: st
+function multilayer_elev_t(st, x, y) result(res)
+type(multilayer_state), intent(in) :: st
 real(knd), intent(in) :: x, y
 real(knd)             :: res
-!
+
 integer  :: j
 real(wp) :: xswd
 complex(wp) :: kappa1, Xfun
-!
+
 xswd   = st%x0 + real(x,wp) * st%cbeta + real(y,wp) * st%sbeta
 kappa1 = exp(cmplx(0.0_wp, -st%dk * xswd, kind=wp))
 Xfun   = 1.0_wp
@@ -483,20 +483,20 @@ do j = 1, st%nsumx
     Xfun = kappa1 * Xfun
     res  = res + real(st%ht_cur(j) * Xfun)
 end do
-!
-end function ml_elev_t
+
+end function multilayer_elev_t
 
 !==============================================================================
 
-function ml_grad_elev(st, x, y) result(res)
-type(ml_state), intent(in) :: st
+function multilayer_grad_elev(st, x, y) result(res)
+type(multilayer_state), intent(in) :: st
 real(knd), intent(in) :: x, y
 real(knd)             :: res(3)
-!
+
 integer  :: j
 real(wp) :: xswd, elev_x_swd, kval
 complex(wp) :: kappa1, Xfun
-!
+
 xswd       = st%x0 + real(x,wp) * st%cbeta + real(y,wp) * st%sbeta
 kappa1     = exp(cmplx(0.0_wp, -st%dk * xswd, kind=wp))
 Xfun       = 1.0_wp
@@ -510,20 +510,20 @@ end do
 res(1) = elev_x_swd * st%cbeta
 res(2) = elev_x_swd * st%sbeta
 res(3) = 0.0_knd
-!
-end function ml_grad_elev
+
+end function multilayer_grad_elev
 
 !==============================================================================
 
-function ml_grad_elev_2nd(st, x, y) result(res)
-type(ml_state), intent(in) :: st
+function multilayer_grad_elev_2nd(st, x, y) result(res)
+type(multilayer_state), intent(in) :: st
 real(knd), intent(in) :: x, y
 real(knd)             :: res(3)
-!
+
 integer  :: j
 real(wp) :: xswd, elev_xx_swd, kval
 complex(wp) :: kappa1, Xfun
-!
+
 xswd        = st%x0 + real(x,wp) * st%cbeta + real(y,wp) * st%sbeta
 kappa1      = exp(cmplx(0.0_wp, -st%dk * xswd, kind=wp))
 Xfun        = 1.0_wp
@@ -537,24 +537,24 @@ end do
 res(1) = elev_xx_swd * st%cbeta * st%cbeta
 res(2) = elev_xx_swd * st%sbeta * st%cbeta
 res(3) = elev_xx_swd * st%sbeta * st%sbeta
-!
-end function ml_grad_elev_2nd
+
+end function multilayer_grad_elev_2nd
 
 !==============================================================================
 
-function ml_pressure(st, x, y, z) result(res)
-type(ml_state), intent(in) :: st
+function multilayer_pressure(st, x, y, z) result(res)
+type(multilayer_state), intent(in) :: st
 real(knd), intent(in) :: x, y, z
 real(knd)             :: res
-!
+
 integer  :: j
 real(wp) :: xswd, eta, zeta_x, zeta_t, z_prime, kval, Rfun, Zfun, Zfun_z
 real(wp) :: sigma_eval, phi_val, u_val, dphi_dsigma, H
 real(wp) :: phi_xswd, phi_z, phi_t_val, phi_sig
 complex(wp) :: kappa1, Xfun, cx
-!
+
 xswd = st%x0 + real(x,wp) * st%cbeta + real(y,wp) * st%sbeta
-!
+
 if (real(z,wp) >= st%zref) then
     call calc_elev_and_slope(st, xswd, eta, zeta_x, zeta_t)
     H = eta - st%zref
@@ -587,10 +587,10 @@ else
         phi_t_val = phi_t_val + real(st%ct_cur(j,1) * Xfun) * Zfun
     end do
 end if
-!
+
 res = (-phi_t_val - 0.5_wp*(phi_xswd**2 + phi_z**2) - real(z,wp)*st%grav) * st%rho
-!
-end function ml_pressure
+
+end function multilayer_pressure
 
 !==============================================================================
 

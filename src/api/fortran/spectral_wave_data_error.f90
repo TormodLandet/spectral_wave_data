@@ -33,6 +33,7 @@ type swd_error
                       ! 1003: SWD file data read error
                       ! 1004: invalid input parameters
                       ! 1005: Not able to allocate memory
+                      ! 1006: H2-operator or FFT internal error
     character(len=:), allocatable :: msg ! Characters to describe the error
 contains
     procedure :: raised     ! Return .true. if error has been signaled

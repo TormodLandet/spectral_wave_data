@@ -9,9 +9,9 @@ use open_swd_file_def, only: open_swd_file, swd_validate_binary_convention, &
                              swd_magic_number
 use spectral_wave_data_def, only: spectral_wave_data
 use spectral_interpolation_def, only: spectral_interpolation
-use multilayer_long_crested_def, only: ml_state, ml_init, ml_close, ml_apply_window, &
-    ml_phi, ml_stream, ml_phi_t, ml_grad_phi, ml_elev, ml_elev_t, &
-    ml_grad_elev, ml_grad_elev_2nd, ml_pressure
+use multilayer_long_crested_def, only: multilayer_state, multilayer_init, multilayer_close, multilayer_apply_window, &
+    multilayer_phi, multilayer_stream, multilayer_phi_t, multilayer_grad_phi, multilayer_elev, multilayer_elev_t, &
+    multilayer_grad_elev, multilayer_grad_elev_2nd, multilayer_pressure
 use swd_version, only: version
 
 implicit none
@@ -20,7 +20,7 @@ private
 public :: spectral_wave_data_shape_7_impl_1
 
 type, extends(spectral_wave_data) :: spectral_wave_data_shape_7_impl_1
-    type(ml_state) :: st                   ! Shared kinematics state
+    type(multilayer_state) :: st                   ! Shared kinematics state
     real(wp)           :: d                ! Water depth (or -1 for infinite depth)
     real(wp)           :: zref             ! z-pos of bottom sigma-layer
     integer            :: icur             ! Column index of most recently read data (1:4)
@@ -72,7 +72,7 @@ if (opened) close(self % unit)
 if (allocated(self % cid))    deallocate(self % cid)
 if (allocated(self % h_win))  deallocate(self % h_win)
 if (allocated(self % c_win))  deallocate(self % c_win)
-call ml_close(self % st)
+call multilayer_close(self % st)
 self % file = '0'
 self % unit = 0
 end subroutine close
@@ -279,7 +279,7 @@ else
     tanhdkd_eff = 1.0_wp
 end if
 !
-call ml_init(self % st, n_f, nsumx_f, dk_f, d_f, zref_f, tanhdkd_eff, &
+call multilayer_init(self % st, n_f, nsumx_f, dk_f, d_f, zref_f, tanhdkd_eff, &
              nlayers_f, sig_wp, self % cbeta, self % sbeta, self % x0,  &
              self % grav, self % rho, dc_bias_f)
 deallocate(sig_wp)
@@ -433,7 +433,7 @@ associate(h => self % h_win, c => self % c_win, ic => self % icur, ip => self % 
         end do
     end if
     i1 = ip(1,ic); i2 = ip(2,ic); i3 = ip(3,ic); i4 = ip(4,ic)
-    call ml_apply_window(self % st, h, c, self % tpol, i1, i2, i3, i4, &
+    call multilayer_apply_window(self % st, h, c, self % tpol, i1, i2, i3, i4, &
                          delta, self % dt)
 end associate
 return
@@ -453,28 +453,28 @@ function phi(self, x, y, z) result(res)
 class(spectral_wave_data_shape_7_impl_1), intent(in) :: self
 real(knd), intent(in) :: x, y, z
 real(knd) :: res
-res = ml_phi(self % st, x, y, z)
+res = multilayer_phi(self % st, x, y, z)
 end function phi
 
 function stream(self, x, y, z) result(res)
 class(spectral_wave_data_shape_7_impl_1), intent(in) :: self
 real(knd), intent(in) :: x, y, z
 real(knd) :: res
-res = ml_stream(self % st, x, y, z)
+res = multilayer_stream(self % st, x, y, z)
 end function stream
 
 function phi_t(self, x, y, z) result(res)
 class(spectral_wave_data_shape_7_impl_1), intent(in) :: self
 real(knd), intent(in) :: x, y, z
 real(knd) :: res
-res = ml_phi_t(self % st, x, y, z)
+res = multilayer_phi_t(self % st, x, y, z)
 end function phi_t
 
 function grad_phi(self, x, y, z) result(res)
 class(spectral_wave_data_shape_7_impl_1), intent(in) :: self
 real(knd), intent(in) :: x, y, z
 real(knd) :: res(3)
-res = ml_grad_phi(self % st, x, y, z)
+res = multilayer_grad_phi(self % st, x, y, z)
 end function grad_phi
 
 function grad_phi_2nd(self, x, y, z) result(res)
@@ -502,35 +502,35 @@ function elev(self, x, y) result(res)
 class(spectral_wave_data_shape_7_impl_1), intent(in) :: self
 real(knd), intent(in) :: x, y
 real(knd) :: res
-res = ml_elev(self % st, x, y)
+res = multilayer_elev(self % st, x, y)
 end function elev
 
 function elev_t(self, x, y) result(res)
 class(spectral_wave_data_shape_7_impl_1), intent(in) :: self
 real(knd), intent(in) :: x, y
 real(knd) :: res
-res = ml_elev_t(self % st, x, y)
+res = multilayer_elev_t(self % st, x, y)
 end function elev_t
 
 function grad_elev(self, x, y) result(res)
 class(spectral_wave_data_shape_7_impl_1), intent(in) :: self
 real(knd), intent(in) :: x, y
 real(knd) :: res(3)
-res = ml_grad_elev(self % st, x, y)
+res = multilayer_grad_elev(self % st, x, y)
 end function grad_elev
 
 function grad_elev_2nd(self, x, y) result(res)
 class(spectral_wave_data_shape_7_impl_1), intent(in) :: self
 real(knd), intent(in) :: x, y
 real(knd) :: res(3)
-res = ml_grad_elev_2nd(self % st, x, y)
+res = multilayer_grad_elev_2nd(self % st, x, y)
 end function grad_elev_2nd
 
 function pressure(self, x, y, z) result(res)
 class(spectral_wave_data_shape_7_impl_1), intent(in) :: self
 real(knd), intent(in) :: x, y, z
 real(knd) :: res
-res = ml_pressure(self % st, x, y, z)
+res = multilayer_pressure(self % st, x, y, z)
 end function pressure
 
 subroutine convergence(self, x, y, z, csv)

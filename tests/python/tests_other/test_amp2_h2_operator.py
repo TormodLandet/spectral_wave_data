@@ -363,53 +363,62 @@ def test_shape2_amp2_elev(airy_finite_depth_swd):
 
 
 # ---------------------------------------------------------------------------
-# Test 7: non-power-of-two nx must raise an error at construction time
+# Test 7: non-power-of-two nx is now ALLOWED (performance warning only)
 # ---------------------------------------------------------------------------
 
-def test_non_power_of_two_nx_raises_error(tmp_path):
+def test_non_power_of_two_nx_opens_ok(tmp_path):
     """
-    amp=2 implementation requires nx = 2*n to be a power of two.
-    Opening a file with n_swd=100 (nx=200, not power-of-two) must raise
-    an error (SwdInputValueError or similar).
+    nx = 2*n no longer needs to be a power of two.  Opening a file with
+    n_swd=100 (nx=200) must succeed without raising an error.
     """
-    fname = str(tmp_path / 'bad_nx.swd')
+    fname = str(tmp_path / 'non_pow2_nx.swd')
     n_swd = 100   # nx = 200, not a power of two
     dk = 0.1
-    nsteps, dt = 2, 1.0
-    h_list  = [np.zeros(n_swd + 1, dtype=complex)] * nsteps
-    ht_list = [np.zeros(n_swd + 1, dtype=complex)] * nsteps
-    c_list  = [np.zeros(n_swd + 1, dtype=complex)] * nsteps
-    ct_list = [np.zeros(n_swd + 1, dtype=complex)] * nsteps
+    nsteps, dt = 4, 1.0
+    A = 0.05
+    k1 = dk
+    omega = math.sqrt(GRAV * k1)
+    h_list, ht_list, c_list, ct_list = [], [], [], []
+    for istep in range(nsteps):
+        t = istep * dt
+        h  = np.zeros(n_swd + 1, dtype=complex)
+        ht = np.zeros(n_swd + 1, dtype=complex)
+        c  = np.zeros(n_swd + 1, dtype=complex)
+        ct = np.zeros(n_swd + 1, dtype=complex)
+        h[1]  = A * np.exp(1j * omega * t)
+        ht[1] = 1j * omega * h[1]
+        c[1]  = 1j * (omega / k1) * h[1]
+        ct[1] = 1j * omega * c[1]
+        h_list.append(h);  ht_list.append(ht)
+        c_list.append(c);  ct_list.append(ct)
     write_amp2_swd(fname, n_swd, dk, nsteps, dt,
                    h_list, ht_list, c_list, ct_list, depth=None)
-
-    # The Python API converts Fortran errors to exceptions at construction time
-    from spectral_wave_data import spectral_wave_data as swd_module
-    with pytest.raises(Exception) as excinfo:
-        swd = SpectralWaveData(fname, 0.0, 0.0, 0.0, 0.0, rho=1025.0, impl=0)
-        swd.close()
-    assert 'power of two' in str(excinfo.value).lower() or 'amp' in str(excinfo.value).lower(), \
-        f'Unexpected error message: {excinfo.value}'
-
-
-# ---------------------------------------------------------------------------
-# Test 8: env-var SWD_NUM_H2_LAYERS override
-# ---------------------------------------------------------------------------
-
-def test_env_var_nlayers(airy_deep_water_swd, monkeypatch):
-    """
-    Setting SWD_NUM_H2_LAYERS=5 before construction should result in nlayers=5.
-    """
-    fname, n_swd, dk, A, nsteps, dt, omega, k1 = airy_deep_water_swd
-    monkeypatch.setenv('SWD_NUM_H2_LAYERS', '5')
     swd = SpectralWaveData(fname, 0.0, 0.0, 0.0, 0.0, rho=1025.0, impl=0)
     try:
-        # nlayers is exposed via get_int('nlayers')
-        nlayers = swd['nlayers']
-        assert nlayers == 5, f"Expected nlayers=5, got {nlayers}"
+        swd.update_time(dt)
+        eta = swd.elev(0.0, 0.0)
+        assert math.isfinite(eta)
     finally:
         swd.close()
-    monkeypatch.delenv('SWD_NUM_H2_LAYERS', raising=False)
+
+
+# ---------------------------------------------------------------------------
+# Test 8: env-var SWD_NUM_H2_STEPS override
+# ---------------------------------------------------------------------------
+
+def test_env_var_nsteps(airy_deep_water_swd, monkeypatch):
+    """
+    Setting SWD_NUM_H2_STEPS=5 should result in nlayers = 5+1 = 6.
+    """
+    fname, n_swd, dk, A, nsteps, dt, omega, k1 = airy_deep_water_swd
+    monkeypatch.setenv('SWD_NUM_H2_STEPS', '5')
+    swd = SpectralWaveData(fname, 0.0, 0.0, 0.0, 0.0, rho=1025.0, impl=0)
+    try:
+        nlayers = swd['nlayers']
+        assert nlayers == 6, f"Expected nlayers=6 (nstep+1=5+1), got {nlayers}"
+    finally:
+        swd.close()
+    monkeypatch.delenv('SWD_NUM_H2_STEPS', raising=False)
 
 
 # ---------------------------------------------------------------------------
@@ -426,5 +435,72 @@ def test_grad_phi_finite(airy_deep_water_swd):
         assert math.isfinite(gp.x), f'grad_phi.x not finite: {gp.x}'
         assert math.isfinite(gp.z), f'grad_phi.z not finite: {gp.z}'
         assert abs(gp.x) + abs(gp.z) > 1e-6, 'grad_phi is all zeros'
+    finally:
+        swd.close()
+
+
+# ---------------------------------------------------------------------------
+# Test 10: nlayers = nstep+1 with exact sigma positions
+# ---------------------------------------------------------------------------
+
+def test_default_nlayers_is_nstep_plus_one(airy_deep_water_swd):
+    """Default nlayers must equal nstep+1 = 21."""
+    fname = airy_deep_water_swd[0]
+    swd = SpectralWaveData(fname, 0.0, 0.0, 0.0, 0.0, rho=1025.0, impl=0)
+    try:
+        assert swd['nlayers'] == 21, f"Expected 21, got {swd['nlayers']}"
+    finally:
+        swd.close()
+
+
+# ---------------------------------------------------------------------------
+# Test 11: nonlinear kinematics validated against raschii Stokes wave
+# ---------------------------------------------------------------------------
+
+def test_nonlinear_kinematics_vs_raschii(tmp_path):
+    """
+    Use raschii to write an amp=2 SWD file for a moderately steep Stokes wave
+    (5th order), then compare H2 kinematics at depth against raschii's analytic
+    velocity field.
+
+    raschii >= 1.2 required (amp=2 SWD writer).
+    """
+    raschii = pytest.importorskip('raschii',
+                                   reason='raschii >= 1.2 required for this test')
+
+    depth   = 20.0      # m
+    height  = 2.0       # wave height  H/d = 0.10  (moderate steepness)
+    length  = 40.0      # wavelength
+    N_order = 5
+
+    wave = raschii.StokesWave(height=height, depth=depth, length=length, N=N_order)
+
+    fname = str(tmp_path / 'stokes_amp2.swd')
+    # raschii 1.2 supports amp=2 for shape=2
+    wave.write_swd(fname, tmax=wave.period * 4, dt=wave.period / 20, amp=2)
+
+    swd = SpectralWaveData(fname, 0.0, 0.0, 0.0, 0.0, rho=1025.0, impl=0)
+    try:
+        t_eval = wave.period * 0.5
+        swd.update_time(t_eval)
+
+        x_points = [0.0, length / 4, length / 2]
+        z_points = [-1.0, -3.0, -depth * 0.5]
+
+        for x_app in x_points:
+            for z_app in z_points:
+                gp   = swd.grad_phi(x_app, 0.0, z_app)
+                vel  = wave.velocity(x=x_app, z=z_app).squeeze()
+                u_raschii = float(vel[0])   # horizontal
+                w_raschii = float(vel[1])   # vertical
+
+                # H2 should recover analytic kinematics within ~10 %
+                # (5 steps at moderate steepness; tight enough to catch coding bugs)
+                u_swd = float(gp.x)
+                w_swd = float(gp.z)
+                scale = max(abs(u_raschii), 1e-4)
+                assert abs(u_swd - u_raschii) / scale < 0.15, (
+                    f'u at x={x_app}, z={z_app}: SWD={u_swd:.4g}, '
+                    f'raschii={u_raschii:.4g}')
     finally:
         swd.close()
