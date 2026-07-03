@@ -21,6 +21,7 @@ use spectral_wave_data_shape_4_impl_2_def, only: spectral_wave_data_shape_4_impl
 use spectral_wave_data_shape_5_impl_1_def, only: spectral_wave_data_shape_5_impl_1
 use spectral_wave_data_shape_6_impl_1_def, only: spectral_wave_data_shape_6_impl_1
 use spectral_wave_data_shape_7_impl_1_def, only: spectral_wave_data_shape_7_impl_1
+use spectral_wave_data_shape_1_or_2_impl_7_def, only: spectral_wave_data_shape_1_or_2_impl_7
 
 implicit none
 private
@@ -190,26 +191,38 @@ end if
 select_ok = .false.
 select case(shp)
 case(1)
-    if (impl_swd == 0 .or. impl_swd == 1) then
-        if (amp/=2) then
-            select_ok = .true.
-            allocate(swd,                                      &
-                source=spectral_wave_data_shape_1_impl_1(      &
-                file_swd, x0, y0, t0, beta, rho=rho_swd,       &
-                nsumx=nsumx_swd, ipol=ipol_swd, norder=norder_swd, &
-                dc_bias=dc_bias_swd), stat=ios)
-        end if
+    if ((impl_swd == 0 .or. impl_swd == 7) .and. amp == 2) then
+        ! amp=2: lazy H2-operator implementation (sigma-coordinate kinematics)
+        select_ok = .true.
+        allocate(swd,                                                &
+            source=spectral_wave_data_shape_1_or_2_impl_7(          &
+            file_swd, x0, y0, t0, beta, rho=rho_swd,               &
+            nsumx=nsumx_swd, ipol=ipol_swd, norder=norder_swd,     &
+            dc_bias=dc_bias_swd), stat=ios)
+    else if ((impl_swd == 0 .or. impl_swd == 1) .and. amp /= 2) then
+        select_ok = .true.
+        allocate(swd,                                      &
+            source=spectral_wave_data_shape_1_impl_1(      &
+            file_swd, x0, y0, t0, beta, rho=rho_swd,       &
+            nsumx=nsumx_swd, ipol=ipol_swd, norder=norder_swd, &
+            dc_bias=dc_bias_swd), stat=ios)
     end if
 case(2)
-    if (impl_swd == 0 .or. impl_swd == 1) then
-        if (amp/=2) then
-            select_ok = .true.
-            allocate(swd,                                      &
-                source=spectral_wave_data_shape_2_impl_1(      &
-                file_swd, x0, y0, t0, beta, rho=rho_swd,       &
-                nsumx=nsumx_swd, ipol=ipol_swd, norder=norder_swd, &
-                dc_bias=dc_bias_swd), stat=ios)
-        end if
+    if ((impl_swd == 0 .or. impl_swd == 7) .and. amp == 2) then
+        ! amp=2: lazy H2-operator implementation (sigma-coordinate kinematics)
+        select_ok = .true.
+        allocate(swd,                                                &
+            source=spectral_wave_data_shape_1_or_2_impl_7(          &
+            file_swd, x0, y0, t0, beta, rho=rho_swd,               &
+            nsumx=nsumx_swd, ipol=ipol_swd, norder=norder_swd,     &
+            dc_bias=dc_bias_swd), stat=ios)
+    else if ((impl_swd == 0 .or. impl_swd == 1) .and. amp /= 2) then
+        select_ok = .true.
+        allocate(swd,                                      &
+            source=spectral_wave_data_shape_2_impl_1(      &
+            file_swd, x0, y0, t0, beta, rho=rho_swd,       &
+            nsumx=nsumx_swd, ipol=ipol_swd, norder=norder_swd, &
+            dc_bias=dc_bias_swd), stat=ios)
     end if
 case(3)
     if (impl_swd == 0 .or. impl_swd == 1) then

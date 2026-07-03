@@ -157,10 +157,12 @@ where
        |  2: All amplitudes related to the shape class is specified. However,
        |     the velocity potential is only interpreted on the free surface.
        |     The :math:`z`-dependencies are removed from all formulas.
-       |     This option is introduced for reasearch on how to map the
+       |     This option is introduced for research on how to map the
        |     potential to other vertical locations. More accurate calculations
        |     are possible but at significantly higher computational cost.
-       |     The current implementation of the API does not support this feature.
+       |     For shape 1 and shape 2, this mode is fully supported: the library
+       |     automatically applies the H2 operator to propagate the surface
+       |     potential to depth. See :doc:`amp2_free_surface_potential`.
        |  3: Functions related to the velocity potential are not specified.
        |     It is only possible to evaluate surface elevation quantities
        |     with this option. For other calculations :math:`\phi\equiv 0` is applied.

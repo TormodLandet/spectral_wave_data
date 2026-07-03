@@ -9,6 +9,13 @@ Shape class 7
   Only ``amp = 1`` (complex amplitudes with conjugate symmetry) is supported.
   The constructor raises an error for any other ``amp`` value.
 
+.. seealso::
+
+   :doc:`amp2_free_surface_potential`
+      Shape classes 1 and 2 with ``amp=2`` also use the sigma-coordinate
+      kinematics of shape 7, extended with the H2 operator for nonlinear
+      depth propagation.
+
 This shape class describes long-crested waves in a **wave-following sigma-coordinate**
 representation.  Instead of evaluating the velocity potential with a single vertical basis function
 (as in shape 2), the potential is stored on :math:`N_\sigma` horizontal layers that deform with the

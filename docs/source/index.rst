@@ -25,6 +25,7 @@ This is the documentation for the GitHub organization
    rationales.rst
    theory.rst
    swd_format.rst
+   amp2_free_surface_potential.rst
    api_specification.rst
    programming.rst
    tools.rst

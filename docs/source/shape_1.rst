@@ -165,3 +165,9 @@ order :math:`q` we apply the following Taylor expansion above the calm free surf
 
 .. math::
    Z_j(z) = 1 + \sum_{p=1}^{q-1}\frac{(k_j z)^p}{p!}, \qquad z > 0
+
+.. seealso::
+
+   :doc:`amp2_free_surface_potential`
+      How to use shape-1 files written with ``amp=2`` (free-surface potential)
+      for nonlinear kinematics via the internal H2 operator.
