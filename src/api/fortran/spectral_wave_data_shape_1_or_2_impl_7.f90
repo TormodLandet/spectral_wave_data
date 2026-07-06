@@ -49,8 +49,12 @@ integer, parameter :: nstep_default = 20   ! default number of H2 iteration step
 integer, parameter :: nstep_min     = 2
 integer, parameter :: nstep_max     = 100
 
-! M_kin: nonlinearity order (hardcoded; changing requires recompilation)
-integer, parameter :: M_kin_h2 = 5
+! M_kin: nonlinearity order for the H2 operator.
+! Derived from the SWD header 'order' field at construction time (see constructor).
+! Falls back to M_kin_default when order <= 0 (fully nonlinear flag in SWD).
+integer, parameter :: M_kin_default = 5
+integer, parameter :: M_kin_min     = 1
+integer, parameter :: M_kin_max     = 10
 
 !==============================================================================
 ! The new shape class
@@ -127,7 +131,7 @@ integer,   optional, intent(in)  :: norder
 logical,   optional, intent(in)  :: dc_bias
 type(spectral_wave_data_shape_1_or_2_impl_7) :: self
 
-integer :: i, ios, err_id, nstep_local
+integer :: i, ios, err_id, nstep_local, M_kin_h2_local
 integer(int64) :: ipos1, ipos2
 integer(c_int) :: fmt, shp, amp, n, order, nid, nsteps, nstrip
 real(c_float)  :: d_c, dk_c, dt_c, grav_c, lscale_c, magic_c
@@ -228,6 +232,15 @@ self%dk_val = real(dk64, wp)
 self%norder = self%order
 if (present(norder)) then
     if (norder /= 0) self%norder = norder
+end if
+
+! M_kin for the H2 operator: use the SWD file's perturbation order.
+! order=-1 means 'fully nonlinear' in SWD convention; fall back to M_kin_default.
+! Clamped to [M_kin_min, M_kin_max] for safety.
+if (self%order <= 0) then
+    M_kin_h2_local = M_kin_default
+else
+    M_kin_h2_local = min(max(self%order, M_kin_min), M_kin_max)
 end if
 if (present(dc_bias)) then
     self%dc_bias = dc_bias
@@ -392,7 +405,7 @@ if (zref64 > 0.0_c_double) zref64 = 0.0_c_double
 self%zref = real(zref64, wp)
 
 ! --- Initialise H2 operator ---
-call h2op_init(self%h2op, M_kin=M_kin_h2, nstep=nstep_local, nx=self%nx, &
+call h2op_init(self%h2op, M_kin=M_kin_h2_local, nstep=nstep_local, nx=self%nx, &
                dk=real(dk64, c_double), h_depth=d64, zref=real(zref64, c_double), &
                err_msg=err_msg(1))
 if (err_msg(1) /= '') then
