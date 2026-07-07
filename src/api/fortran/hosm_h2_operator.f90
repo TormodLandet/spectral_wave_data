@@ -64,7 +64,10 @@ contains
 !==============================================================================
 
 subroutine h2op_init(op, M_kin, nstep, nx, dk, h_depth, zref, err_msg)
-! Initialise the H2 operator.  nx must be a power of two.
+! Initialise the H2 operator.
+! nx should be a product of small primes (ideally a power of two) for best
+! FFT performance.  PocketFFT handles any positive nx, but large prime factors
+! make the FFT plans significantly slower.
 type(h2op_state), intent(out) :: op
 integer,          intent(in)  :: M_kin, nstep, nx
 real(dp),         intent(in)  :: dk, h_depth, zref
@@ -75,9 +78,8 @@ real(dp) :: dist
 
 err_msg = ''
 
-! Validate nx is a power of two
-if (nx <= 0 .or. iand(nx, nx-1) /= 0) then
-    write(err_msg,'(a,i0)') 'h2op_init: nx must be a power of two, got nx=', nx
+if (nx <= 0) then
+    write(err_msg,'(a,i0)') 'h2op_init: nx must be positive, got nx=', nx
     return
 end if
 

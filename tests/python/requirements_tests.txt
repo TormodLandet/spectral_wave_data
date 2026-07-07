@@ -3,4 +3,4 @@ pytest-cov
 pytest-html
 numpy
 sympy
-raschii>=1.2
+raschii>=2.0.0
