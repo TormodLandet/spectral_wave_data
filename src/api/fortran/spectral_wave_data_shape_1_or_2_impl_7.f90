@@ -83,6 +83,10 @@ type, extends(spectral_wave_data) :: spectral_wave_data_shape_1_or_2_impl_7
     !-- FFT plan for n_swd<->nx conversion (plan_nx lives also in h2op, but
     !   we need it before h2op is ready, so keep a reference copy here)
     type(swd_fft_plan) :: plan_nx_prepass
+    !-- Number of complex arrays per time step on disk.
+    !   fmt=100: 4 arrays per time step: h, ht, c, ct.
+    !   fmt=101: 2 arrays per time step: h, c (EXPERIMENTAL/UNSTABLE)
+    integer :: arrays_per_step
 contains
     procedure :: close
     procedure :: update_time
@@ -188,7 +192,17 @@ end if
 ! --- Read header ---
 read(self%unit, end=98, err=99) magic_c
 read(self%unit, end=98, err=99) fmt
-if (fmt /= 100) then
+! ===========================================================================
+! EXPERIMENTAL / UNSTABLE: fmt=101 read support.
+!
+! fmt=101 is an experimental variant that stores only h and c per time step
+! (no time-derivative arrays ht and ct). The fmt=101 specification has NOT
+! been finalised; other aspects of the SWD format (including the header
+! layout) may still change. Files written with fmt=101 (or negative amp flag)
+! carry NO forward-compatibility guarantee and may stop being readable at
+! any time without notice. Only fmt=100 with amp 1 or 3 are currently stable.
+! ===========================================================================
+if (fmt /= 100 .and. fmt /= 101) then
     write(err_msg(1),'(a,a)') 'SWD file: ', trim(self%file)
     write(err_msg(2),'(a,i0)') 'Unknown fmt=', fmt
     call self%error%set_id_msg(err_proc, 1003, err_msg(1:2))
@@ -320,16 +334,27 @@ if (zref_env > 0.0_c_double) then
     ! --- Eta-prepass: scan timestep range to find global eta_min ---
     inquire(self%unit, pos=self%ipos0)
 
-    ! Allocate scratch and measure step size from the first timestep
+    ! Allocate scratch and measure step size from the first timestep.
+    ! fmt=100: 4 arrays/step (h,ht,c,ct)
+    ! fmt=101: 2 arrays/step (h,c).
+    if (fmt == 101) then
+        self%arrays_per_step = 2
+    else
+        self%arrays_per_step = 4
+    end if
     allocate(h_step(0:int(n)))
     allocate(eta_nx(0:self%nx-1))
     ipos1 = self%ipos0
     read(self%unit, pos=ipos1, end=98, err=99) h_step(:)    ! h(0:n)
-    read(self%unit, end=98, err=99) h_step(:)               ! ht(0:n)
-    read(self%unit, end=98, err=99) h_step(:)               ! c(0:n)
-    read(self%unit, end=98, err=99) h_step(:)               ! ct(0:n)
+    if (self%arrays_per_step == 4) then
+        read(self%unit, end=98, err=99) h_step(:)           ! ht(0:n)
+        read(self%unit, end=98, err=99) h_step(:)           ! c(0:n)
+        read(self%unit, end=98, err=99) h_step(:)           ! ct(0:n)
+    else
+        read(self%unit, end=98, err=99) h_step(:)           ! c(0:n)
+    end if
     inquire(self%unit, pos=ipos2)
-    self%size_complex = (ipos2 - ipos1) / (4 * (int(n) + 1))
+    self%size_complex = (ipos2 - ipos1) / (self%arrays_per_step * (int(n) + 1))
     self%size_step    = ipos2 - ipos1
 
     ! Scan range: default all steps; narrow if SWD_WINDOW_TMIN/TMAX are set.
@@ -371,16 +396,26 @@ if (zref_env > 0.0_c_double) then
 else
     ! Explicit zref from env var: skip the prepass scan entirely.
     zref64 = zref_env
-    ! Measure step size (needed even without the prepass)
+    ! Measure step size (needed even without the prepass).
+    ! fmt=100: 4 arrays/step (h,ht,c,ct); fmt=101: 2 arrays/step (h,c only).
+    if (fmt == 101) then
+        self%arrays_per_step = 2
+    else
+        self%arrays_per_step = 4
+    end if
     inquire(self%unit, pos=self%ipos0)
     allocate(h_step(0:int(n)))
     ipos1 = self%ipos0
     read(self%unit, pos=ipos1, end=98, err=99) h_step(:)
-    read(self%unit, end=98, err=99) h_step(:)
-    read(self%unit, end=98, err=99) h_step(:)
-    read(self%unit, end=98, err=99) h_step(:)
+    if (self%arrays_per_step == 4) then
+        read(self%unit, end=98, err=99) h_step(:)
+        read(self%unit, end=98, err=99) h_step(:)
+        read(self%unit, end=98, err=99) h_step(:)
+    else
+        read(self%unit, end=98, err=99) h_step(:)
+    end if
     inquire(self%unit, pos=ipos2)
-    self%size_complex = (ipos2 - ipos1) / (4 * (int(n) + 1))
+    self%size_complex = (ipos2 - ipos1) / (self%arrays_per_step * (int(n) + 1))
     self%size_step    = ipos2 - ipos1
 end if
 
@@ -625,12 +660,19 @@ err_msg = ''
 ! Seek to the h-array of the target step (0-based step index = istp_target-1)
 ipos_step = self%ipos0 + int(istp_target - 1, int64) * self%size_step
 
-! Read h(0:n) and c(0:n) from file (skip ht and ct)
+! Read h(0:n) and c(0:n) from file.
+! fmt=100: layout is h, ht, c, ct  -- skip ht (one array) to reach c.
+! fmt=101: layout is h, c           -- c is immediately after h.
 read(self%unit, pos=ipos_step, end=98, err=99) h_file(:)   ! h(0:n)
-! skip ht: advance by one h-array worth of bytes
-ipos_step = ipos_step + int(self%size_complex, int64) * int(self%n + 1, int64)
-read(self%unit, pos=ipos_step + int(self%size_complex, int64) * int(self%n + 1, int64), &
-     end=98, err=99) c_file(:)   ! c(0:n)   [skipping ht]
+if (self%arrays_per_step == 4) then
+    ! skip ht: advance by one complex-array worth of bytes
+    ipos_step = ipos_step + int(self%size_complex, int64) * int(self%n + 1, int64)
+    read(self%unit, pos=ipos_step + int(self%size_complex, int64) * int(self%n + 1, int64), &
+         end=98, err=99) c_file(:)   ! c(0:n)  [skipping ht]
+else
+    read(self%unit, pos=ipos_step + int(self%size_complex, int64) * int(self%n + 1, int64), &
+         end=98, err=99) c_file(:)   ! c(0:n)  [directly after h]
+end if
 
 ! Convert h-spectral to eta on nx grid
 allocate(eta_nx(0:self%nx-1), psi_nx(0:self%nx-1))

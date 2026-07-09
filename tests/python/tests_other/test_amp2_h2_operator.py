@@ -69,10 +69,12 @@ def _real_to_swd_coeff(eta_real):
 
 
 def write_amp2_swd(
-    filename, n_swd, dk, nsteps, dt, h_list, ht_list, c_list, ct_list, depth=None, grav=GRAV
+    filename, n_swd, dk, nsteps, dt, h_list, ht_list, c_list, ct_list,
+    depth=None, grav=GRAV, fmt=100
 ):
     """
-    Write a minimal amp=2 SWD file (shape 1 for deep water, shape 2 for finite depth).
+    Write a minimal amp=2 (or amp=-2) SWD file (shape 1 for deep water,
+    shape 2 for finite depth).
 
     Parameters
     ----------
@@ -81,12 +83,16 @@ def write_amp2_swd(
     nsteps  : int   — number of time steps
     dt      : float — time step size
     h_list  : list of ndarray(n_swd+1, complex)  — elevation coefficients per step
-    ht_list : list of ndarray(n_swd+1, complex)  — d/dt elevation per step
+    ht_list : list of ndarray(n_swd+1, complex)  — d/dt elevation per step (fmt=100 only)
     c_list  : list of ndarray(n_swd+1, complex)  — surface potential per step
-    ct_list : list of ndarray(n_swd+1, complex)  — d/dt potential per step
+    ct_list : list of ndarray(n_swd+1, complex)  — d/dt potential per step (fmt=100 only)
     depth   : float or None  — water depth; None → deep water (shape 1)
+    fmt     : int, 100 or 101
+              100 (stable): stores h, ht, c, ct per step (amp=2)
+              101 (EXPERIMENTAL, no stability guarantees): stores h, c only (amp=-2)
     """
     shp = 1 if depth is None else 2
+    amp = 2 if fmt == 100 else -2
 
     prog = b"SWD_test_amp2".ljust(30)[:30]
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S").encode()[:20].ljust(20)
@@ -95,30 +101,32 @@ def write_amp2_swd(
     with open(filename, "wb") as f:
         # --- SWD header ---
         f.write(struct.pack("<f", 37.0221))  # magic
-        f.write(struct.pack("<i", 100))  # fmt
-        f.write(struct.pack("<i", shp))  # shp
-        f.write(struct.pack("<i", 2))  # amp = 2
-        f.write(prog)  # cprog (30 bytes)
-        f.write(now)  # cdate (20 bytes)
-        f.write(struct.pack("<i", len(cid)))  # nid
-        f.write(cid)  # cid
-        f.write(struct.pack("<f", grav))  # grav
-        f.write(struct.pack("<f", 1.0))  # lscale
-        f.write(struct.pack("<i", 0))  # nstrip
-        f.write(struct.pack("<i", nsteps))  # nsteps
-        f.write(struct.pack("<f", dt))  # dt
-        f.write(struct.pack("<i", -1))  # order (fully nonlinear)
-        f.write(struct.pack("<i", n_swd))  # n
-        f.write(struct.pack("<f", dk))  # dk
+        f.write(struct.pack("<i", fmt))      # fmt (100 or 101)
+        f.write(struct.pack("<i", shp))      # shp
+        f.write(struct.pack("<i", amp))      # amp: +2 for fmt=100, -2 for fmt=101
+        f.write(prog)                         # cprog (30 bytes)
+        f.write(now)                          # cdate (20 bytes)
+        f.write(struct.pack("<i", len(cid))) # nid
+        f.write(cid)                          # cid
+        f.write(struct.pack("<f", grav))     # grav
+        f.write(struct.pack("<f", 1.0))      # lscale
+        f.write(struct.pack("<i", 0))        # nstrip
+        f.write(struct.pack("<i", nsteps))   # nsteps
+        f.write(struct.pack("<f", dt))       # dt
+        f.write(struct.pack("<i", -1))       # order (fully nonlinear)
+        f.write(struct.pack("<i", n_swd))    # n
+        f.write(struct.pack("<f", dk))       # dk
         if shp == 2:
             f.write(struct.pack("<f", depth))  # d (shape 2 only)
 
         # --- Temporal data ---
         for istep in range(nsteps):
             f.write(_to_complex64_bytes(h_list[istep]))
-            f.write(_to_complex64_bytes(ht_list[istep]))
+            if fmt == 100:
+                f.write(_to_complex64_bytes(ht_list[istep]))
             f.write(_to_complex64_bytes(c_list[istep]))
-            f.write(_to_complex64_bytes(ct_list[istep]))
+            if fmt == 100:
+                f.write(_to_complex64_bytes(ct_list[istep]))
 
 
 # ---------------------------------------------------------------------------
@@ -536,3 +544,108 @@ def test_nonlinear_kinematics_vs_raschii(tmp_path):
                 )
     finally:
         swd.close()
+
+
+# ---------------------------------------------------------------------------
+# Tests 12-14: fmt=101 / amp=-2 (EXPERIMENTAL — no stability guarantees)
+#
+# fmt=101 stores only h and c per time step (no ht/ct).  The reader
+# reconstructs time derivatives via finite differences, identical to fmt=100.
+# These tests verify the round-trip works and that results agree with the
+# corresponding fmt=100 file.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def airy_deep_water_swd_fmt101(tmp_path_factory):
+    """Shape-1 amp=-2 / fmt=101 SWD file (EXPERIMENTAL) for a deep-water Airy wave."""
+    tmp = str(tmp_path_factory.mktemp("amp2_deep_fmt101"))
+    fname = os.path.join(tmp, "airy_deep_fmt101.swd")
+    n_swd = 512
+    dk = 0.05
+    A = 0.15
+    nsteps, dt = 8, 0.5
+    h_list, ht_list, c_list, ct_list, omega, k1 = _airy_coefficients(
+        n_swd, dk, A, nsteps, dt, depth=None
+    )
+    write_amp2_swd(
+        fname, n_swd, dk, nsteps, dt, h_list, ht_list, c_list, ct_list,
+        depth=None, fmt=101
+    )
+    return fname, n_swd, dk, A, nsteps, dt, omega, k1
+
+
+@pytest.mark.parametrize("x_app", [0.0, 5.0, 12.3])
+def test_fmt101_elev_matches_analytical(airy_deep_water_swd_fmt101, x_app):
+    """fmt=101 / amp=-2: elev() must match A*cos(k*x - omega*t)."""
+    fname, n_swd, dk, A, nsteps, dt, omega, k1 = airy_deep_water_swd_fmt101
+    swd = SpectralWaveData(fname, 0.0, 0.0, 0.0, 0.0, rho=1025.0, impl=0)
+    try:
+        for istep in range(1, nsteps - 1):
+            t = istep * dt
+            swd.update_time(t)
+            eta_num = swd.elev(x_app, 0.0)
+            eta_anal = A * math.cos(k1 * x_app - omega * t)
+            assert math.isclose(eta_num, eta_anal, rel_tol=1e-4, abs_tol=1e-5), (
+                f"fmt=101 elev mismatch at x={x_app}, t={t}: "
+                f"num={eta_num:.6g}, anal={eta_anal:.6g}"
+            )
+    finally:
+        swd.close()
+
+
+def test_fmt101_phi_decays_with_depth(airy_deep_water_swd_fmt101):
+    """fmt=101 / amp=-2: |phi| must decrease monotonically with depth."""
+    fname = airy_deep_water_swd_fmt101[0]
+    dt = airy_deep_water_swd_fmt101[5]
+    swd = SpectralWaveData(fname, 0.0, 0.0, 0.0, 0.0, rho=1025.0, impl=0)
+    try:
+        swd.update_time(dt)
+        phis = [abs(swd.phi(2.5, 0.0, z)) for z in [0.0, -1.0, -3.0, -8.0]]
+        for i in range(len(phis) - 1):
+            assert phis[i] >= phis[i + 1], (
+                f"fmt=101 phi not decaying with depth: {phis}"
+            )
+    finally:
+        swd.close()
+
+
+def test_fmt101_agrees_with_fmt100(tmp_path):
+    """fmt=101 and fmt=100 files with identical wave data must give the same elev and phi."""
+    n_swd = 256
+    dk = 0.05
+    A = 0.10
+    nsteps, dt = 8, 0.5
+    h_list, ht_list, c_list, ct_list, omega, k1 = _airy_coefficients(
+        n_swd, dk, A, nsteps, dt, depth=None
+    )
+    fname100 = str(tmp_path / "airy_fmt100.swd")
+    fname101 = str(tmp_path / "airy_fmt101.swd")
+    write_amp2_swd(fname100, n_swd, dk, nsteps, dt, h_list, ht_list, c_list, ct_list,
+                   depth=None, fmt=100)
+    write_amp2_swd(fname101, n_swd, dk, nsteps, dt, h_list, ht_list, c_list, ct_list,
+                   depth=None, fmt=101)
+
+    swd100 = SpectralWaveData(fname100, 0.0, 0.0, 0.0, 0.0, rho=1025.0, impl=0)
+    swd101 = SpectralWaveData(fname101, 0.0, 0.0, 0.0, 0.0, rho=1025.0, impl=0)
+    try:
+        for istep in range(1, nsteps - 1):
+            t = istep * dt
+            swd100.update_time(t)
+            swd101.update_time(t)
+            for x_app in [0.0, 5.0]:
+                eta100 = swd100.elev(x_app, 0.0)
+                eta101 = swd101.elev(x_app, 0.0)
+                assert math.isclose(eta100, eta101, rel_tol=1e-5, abs_tol=1e-7), (
+                    f"elev mismatch fmt100 vs fmt101 at x={x_app}, t={t}: "
+                    f"{eta100:.8g} vs {eta101:.8g}"
+                )
+                phi100 = swd100.phi(x_app, 0.0, -1.0)
+                phi101 = swd101.phi(x_app, 0.0, -1.0)
+                assert math.isclose(phi100, phi101, rel_tol=1e-4, abs_tol=1e-6), (
+                    f"phi mismatch fmt100 vs fmt101 at x={x_app}, t={t}: "
+                    f"{phi100:.8g} vs {phi101:.8g}"
+                )
+    finally:
+        swd100.close()
+        swd101.close()

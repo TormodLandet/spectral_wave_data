@@ -1,7 +1,7 @@
 .. _amp2-free-surface-potential:
 
-Free-surface-potential files (``amp=2``)
-=========================================
+Free-surface-potential files (``amp=2`` and ``amp=-2``)
+=========================================================
 
 Shape classes 1 and 2 can be written with ``amp=2``.  In this mode the stored
 ``c`` array contains the velocity potential **at the free surface** rather than
@@ -10,14 +10,16 @@ wave generator (such as a High-Order Spectral Method, HOSM) to hand off its
 fully nonlinear surface potential to SpectralWaveData, which then evaluates
 kinematics at arbitrary depths without going through the source model again.
 
-When you open a shape-1 or shape-2 file that has ``amp=2``, SpectralWaveData
-automatically selects the H2-operator implementation.  No extra flag is needed:
-the choice is made at construction time based on the file header.
+When you open a shape-1 or shape-2 file that has ``amp=2`` (or ``amp=-2``,
+see :ref:`amp2-fmt101` below), SpectralWaveData automatically selects the
+H2-operator implementation.  No extra flag is needed: the choice is made at
+construction time based on the file header.
 
 .. note::
 
    ``amp=2`` is only supported for shape 1 and shape 2 (long-crested waves).
-   Multi-directional shape classes 4 and 5 do not currently support ``amp=2``.
+   Multi-directional shape classes 4 and 5 do not currently support ``amp=2``,
+   even in the experimental code path.
 
 .. note::
 
@@ -156,6 +158,34 @@ give sensible production settings.
 
       export SWD_WINDOW_TMIN=0.0
       export SWD_WINDOW_TMAX=60.0
+
+
+.. _amp2-fmt101:
+
+Disk-efficient variant: ``amp=-2`` / ``fmt=101`` (EXPERIMENTAL)
+----------------------------------------------------------------
+
+.. warning::
+
+   ``fmt=101`` and negative ``amp`` flags are **experimental with no stability
+   guarantees**.  The ``fmt=101`` specification has **not been finalised** and
+   other aspects of the format (including the SWD header layout) may still
+   change.  Files written with these settings may stop being readable in future
+   versions **without notice**.  Only ``amp=2`` / ``fmt=100`` is considered
+   stable.
+
+The ``amp=2`` file stores four complex arrays per time step — ``h``, ``ht``,
+``c``, ``ct`` — but the H2-operator reader never uses the time-derivative
+arrays ``ht`` and ``ct``: it reconstructs time derivatives via a four-step
+finite-difference window.  Writing those arrays is therefore pure overhead.
+
+The experimental ``amp=-2`` / ``fmt=101`` variant stores only ``h`` and ``c``
+per time step, cutting file size by approximately **50 %** with no loss of
+accuracy.  The reader handles both ``fmt=100`` and ``fmt=101`` transparently:
+the same H2-operator path is used and results are identical.
+
+To write ``amp=-2`` files with WAMOD (HOSM) wave generator, set ``swd_amp = -2``
+in the input namelist file (experimental option, may change at any time).
 
 
 .. _amp2-h2-operator:

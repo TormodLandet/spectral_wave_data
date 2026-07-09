@@ -191,15 +191,18 @@ end if
 select_ok = .false.
 select case(shp)
 case(1)
-    if ((impl_swd == 0 .or. impl_swd == 7) .and. amp == 2) then
-        ! amp=2: lazy H2-operator implementation (sigma-coordinate kinematics)
+    if ((impl_swd == 0 .or. impl_swd == 7) .and. abs(amp) == 2) then
+        ! amp=2: lazy H2-operator implementation
+        ! Note: also supports amp=-2, EXPERIMENTAL/UNSTABLE negative flag used by some codes for
+        !       indicating that SWD fmt=101 and amp=2. In the future fmt=101 and amp=2 (not negative)
+        !       should be sufficient and there is no need for using a negative amp flag for this.
         select_ok = .true.
         allocate(swd,                                                &
             source=spectral_wave_data_shape_1_or_2_impl_7(          &
             file_swd, x0, y0, t0, beta, rho=rho_swd,               &
             nsumx=nsumx_swd, ipol=ipol_swd, norder=norder_swd,     &
             dc_bias=dc_bias_swd), stat=ios)
-    else if ((impl_swd == 0 .or. impl_swd == 1) .and. amp /= 2) then
+    else if ((impl_swd == 0 .or. impl_swd == 1) .and. abs(amp) /= 2) then
         select_ok = .true.
         allocate(swd,                                      &
             source=spectral_wave_data_shape_1_impl_1(      &
@@ -208,15 +211,16 @@ case(1)
             dc_bias=dc_bias_swd), stat=ios)
     end if
 case(2)
-    if ((impl_swd == 0 .or. impl_swd == 7) .and. amp == 2) then
-        ! amp=2: lazy H2-operator implementation (sigma-coordinate kinematics)
+    if ((impl_swd == 0 .or. impl_swd == 7) .and. abs(amp) == 2) then
+        ! amp=2: lazy H2-operator implementation
+        ! Note: see comment under case(1) for why negative amp flag is also supported
         select_ok = .true.
         allocate(swd,                                                &
             source=spectral_wave_data_shape_1_or_2_impl_7(          &
             file_swd, x0, y0, t0, beta, rho=rho_swd,               &
             nsumx=nsumx_swd, ipol=ipol_swd, norder=norder_swd,     &
             dc_bias=dc_bias_swd), stat=ios)
-    else if ((impl_swd == 0 .or. impl_swd == 1) .and. amp /= 2) then
+    else if ((impl_swd == 0 .or. impl_swd == 1) .and. abs(amp) /= 2) then
         select_ok = .true.
         allocate(swd,                                      &
             source=spectral_wave_data_shape_2_impl_1(      &
@@ -344,7 +348,10 @@ contains
     end if
     read(luswd, end=98, err=99) c_magic
     read(luswd, end=98, err=99) c_fmt
-    if (c_fmt /= int(100, c_int)) then
+    ! fmt=100 is stable; fmt=101 is EXPERIMENTAL/UNSTABLE
+    ! There is only one difference in fmt=101 => no ht or ct arrays are stored
+    ! (half-size files, but time derivatives must be handled numerically).
+    if (c_fmt /= int(100, c_int) .and. c_fmt /= int(101, c_int)) then
         err_id = 1003
         write(err_msg(2),'(a,i0)') 'Unexpected version number of SWD-file. fmt = ', c_fmt
         return
@@ -389,7 +396,10 @@ contains
     end if
     read(luswd, end=98, err=99) c_magic
     read(luswd, end=98, err=99) c_fmt
-    if (c_fmt /= int(100, c_int)) then
+    ! fmt=100 is stable; fmt=101 is EXPERIMENTAL/UNSTABLE
+    ! There is only one difference in fmt=101 => no ht or ct arrays are stored
+    ! (half-size files, but time derivatives must be handled numerically).
+    if (c_fmt /= int(100, c_int) .and. c_fmt /= int(101, c_int)) then
         err_id = 1003
         write(err_msg(2),'(a,i0)') 'Unexpected version number of SWD-file. fmt = ', c_fmt
         return
