@@ -1,6 +1,6 @@
 module swd_fft_backend
 !
-! ============================================================
+! =============================================================================
 ! LAYER 3 (bottom) of the SWD FFT stack:
 !
 !   swd_fft.f90                  (Layer 1: SWD-specific stateful facade)
@@ -8,40 +8,45 @@ module swd_fft_backend
 !        -> swd_fft_backend.f90   *** THIS FILE ***
 !
 ! This is the FFTW3 backend.  It IS the concrete implementation: it calls the
-! system (or vendored) FFTW3 library directly through the standard Fortran
-! interface `include 'fftw3.f03'`.  There is no separate C shim.
+! system FFTW3 library (or MKL's impl.) directly through the standard Fortran
+! interface `include 'fftw3.f03'`.  There is no separate C shim like there is
+! for the PocketFFT implemantation since FFTW3 has a Fortran 2003 interface.
 !
 ! Build / linking (see src/api/fortran/Cmake/swd_fft.cmake):
 !   - Selected by:  -DSWD_FFT_BACKEND=FFTW
 !   - Requires:     libfftw3 (double precision) + fftw3.f03 on the include path
-!                   (RHEL: dnf install fftw-devel, Debian: apt install libfftw3-dev)
-!   - NOTE: linking against GPL FFTW makes the resulting SWD library GPL, not
-!           MIT.  The distributed Python wheels therefore use the PocketFFT
+!                   or the FFTW3-compatible implementation in Intel MKL.
+!   - NOTE: linking against "normal" FFTW makes the resulting SWD library GPL,
+!           not MIT.  The distributed Python wheels therefore use the PocketFFT
 !           backend (swd_fft_backend_pocketfft.f90).  This file exists mainly so
-!           that FFTW/MKL can be used in-house and to prevent bit-rot.
+!           that GPL FFTW can be used in-house if wanted or with MKL or FFTW3
+!           if an appropriate licence is held (FFTW3 has a commercial offering
+!           for those who do not want to use a GPL-licenced library).
 !
 ! Responsibilities (identical public interface to the PocketFFT backend):
-!   - 1-D operations are plan-based; the plan handle is an opaque C pointer
-!     wrapping an FFTW r2c plan, an FFTW c2r plan and scratch work buffers.
-!       backend_plan_alloc  / backend_plan_free
+!   - Both 1-D and 2-D operations are plan-based; a plan handle is an opaque C
+!     pointer, owned and freed by the caller (no global/module state here).
+!       backend_plan1d_alloc / backend_plan1d_free  (wraps FFTW r2c + c2r plans
+!                                                    and scratch work buffers)
 !       backend_r2c_1d  (scale = 1,   matches numpy rfft)
 !       backend_c2r_1d  (scale = 1/n, matches numpy irfft — FFTW is unnormalized,
 !                        so this backend divides by n explicitly)
-!   - 2-D c2r is plan-less at the interface; FFTW plans are cached internally in
-!     a module-level cache keyed by (nx, ny) and reused across calls for speed.
+!       backend_plan2d_alloc / backend_plan2d_free  (wraps the FFTW 2-D c2r plan
+!                                                    and its work buffers)
 !       backend_c2r_2d  (scale = 1, unnormalized — the FFTW convention; the
 !                        caller pre-scales coefficients)
-!       For ny = 1 this degenerates to a 1-D unnormalized transform.
+!       For ny = 1 the 2-D transform degenerates to a 1-D unnormalized transform.
 !   - All transforms use Fortran column-major (contiguous in the first index).
-!   - No SWD-specific knowledge; spectral coefficient conventions handled above.
+!   - No SWD-specific knowledge; spectral coefficient conventions handled on
+!     layers above this backend layer.
 !
 ! Thread-safety: like the rest of SWD (and the PocketFFT backend), this backend
-! assumes single-threaded use per process.  FFTW plan creation and the module
-! plan cache below are NOT thread-safe; plan *execution* is, but we do not rely
-! on that here.
+! assumes single-threaded use per process.  FFTW plan creation is not
+! thread-safe; plan *execution* is, but we do not rely on that here.  There is
+! no module-level mutable state — every plan lives in a caller-owned handle.
 !
 ! The mutually exclusive alternative is swd_fft_backend_pocketfft.f90.
-! ============================================================
+! =============================================================================
 
 ! The FFTW3 Fortran interface (fftw3.f03) references many iso_c_binding kinds
 ! (c_int32_t, c_intptr_t, c_size_t, c_funptr, ...), so import the whole module
@@ -58,10 +63,12 @@ include 'fftw3.f03'
 !                    P U B L I C    Q U A N T I T I E S
 !##############################################################################
 
-public :: backend_plan_alloc
-public :: backend_plan_free
+public :: backend_plan1d_alloc
+public :: backend_plan1d_free
 public :: backend_r2c_1d
 public :: backend_c2r_1d
+public :: backend_plan2d_alloc
+public :: backend_plan2d_free
 public :: backend_c2r_2d
 
 !##############################################################################
@@ -82,23 +89,19 @@ type :: fftw_state_1d
 end type fftw_state_1d
 
 !------------------------------------------------------------------------------
-! 2-D c2r plan cache.  FFTW needs an explicit plan per (nx, ny); we build it
-! lazily on first use and reuse it on subsequent calls with the same size.
+! 2-D c2r plan state.  A c_ptr to one of these is the opaque 2-D plan handle.
 ! Persistent work buffers keep the plan valid (fixed arrays/alignment) and give
 ! us a safe place to copy the caller's input into — FFTW's multi-dimensional
 ! c2r transform DESTROYS its input array, so we must never transform the
 ! caller's (intent(in)) data in place.
 !------------------------------------------------------------------------------
-type :: fftw_cache_2d
+type :: fftw_state_2d
     integer                        :: nx   = 0
     integer                        :: ny   = 0
     type(c_ptr)                    :: plan = c_null_ptr
     complex(c_double), allocatable :: cin(:,:)   ! (nx/2+1, ny) complex scratch
     real(c_double),    allocatable :: rout(:,:)  ! (nx, ny)     real scratch
-end type fftw_cache_2d
-
-type(fftw_cache_2d), allocatable, save :: cache2d(:)
-integer,                          save :: n_cache2d = 0
+end type fftw_state_2d
 
 contains
 
@@ -106,7 +109,7 @@ contains
 ! 1-D plan lifecycle
 !==============================================================================
 
-subroutine backend_plan_alloc(handle, n, err_msg)
+subroutine backend_plan1d_alloc(handle, n, err_msg)
 ! Allocate a 1-D FFT plan (r2c + c2r) for transforms of length n.
 type(c_ptr),      intent(out) :: handle
 integer,          intent(in)  :: n
@@ -154,12 +157,12 @@ if (.not. c_associated(st%plan_r2c) .or. .not. c_associated(st%plan_c2r)) then
 end if
 !
 handle = c_loc(st)
-end subroutine backend_plan_alloc
+end subroutine backend_plan1d_alloc
 
 !==============================================================================
 
-subroutine backend_plan_free(handle)
-! Free a plan previously allocated by backend_plan_alloc.  No-op for null handle.
+subroutine backend_plan1d_free(handle)
+! Free a 1-D plan previously allocated by backend_plan1d_alloc.  No-op if null.
 type(c_ptr), intent(inout) :: handle
 !
 type(fftw_state_1d), pointer :: st
@@ -172,7 +175,7 @@ if (allocated(st%rbuf)) deallocate(st%rbuf)
 if (allocated(st%cbuf)) deallocate(st%cbuf)
 deallocate(st)
 handle = c_null_ptr
-end subroutine backend_plan_free
+end subroutine backend_plan1d_free
 
 !==============================================================================
 ! 1-D transforms
@@ -233,92 +236,73 @@ end subroutine backend_c2r_1d
 ! 2-D transform (plan-less interface, internally cached FFTW plans)
 !==============================================================================
 
-subroutine backend_c2r_2d(nx, ny, cmplx_in, real_out, err_msg)
+subroutine backend_c2r_2d(handle, cmplx_in, real_out, err_msg)
 ! 2-D complex-to-real inverse FFT.  Scale = 1 (unnormalized, FFTW convention).
 ! Input:  cmplx_in(nx/2+1, ny)  — Fortran column-major (contiguous in x).
 ! Output: real_out(nx, ny)      — Fortran column-major.
+! nx, ny are recorded in the plan created by backend_plan2d_alloc.
 ! For ny = 1 this is equivalent to a 1-D unnormalized irfft.
 ! The caller is responsible for pre-scaling coefficients as needed.
-integer,           intent(in)  :: nx, ny
+type(c_ptr),       intent(in)  :: handle
 complex(c_double), intent(in)  :: cmplx_in(*)
 real(c_double),    intent(out) :: real_out(*)
 character(len=*),  intent(out) :: err_msg
 !
-integer :: idx, nxh, ncplx, nreal
+type(fftw_state_2d), pointer :: st
+integer :: nxh, ncplx, nreal
 !
 err_msg = ''
-if (nx <= 0 .or. ny <= 0) then
-    write(err_msg, '(a,i0,a,i0)') 'swd_fft_backend(fftw): invalid 2-D size nx=', &
-        nx, ' ny=', ny
+if (.not. c_associated(handle)) then
+    err_msg = 'swd_fft_backend(fftw): c2r_2d called with null plan'
     return
 end if
+call c_f_pointer(handle, st)
 !
-nxh   = nx/2 + 1
-ncplx = nxh * ny
-nreal = nx  * ny
-!
-call get_cache2d_entry(nx, ny, idx, err_msg)
-if (err_msg /= '') return
+nxh   = st%nx/2 + 1
+ncplx = nxh   * st%ny
+nreal = st%nx * st%ny
 !
 ! Copy the caller's spectrum into the scratch input buffer.  FFTW's 2-D c2r
 ! overwrites its input, so we must not transform cmplx_in directly.
-cache2d(idx)%cin = reshape(cmplx_in(1:ncplx), [nxh, ny])
+st%cin = reshape(cmplx_in(1:ncplx), [nxh, st%ny])
 !
-call fftw_execute_dft_c2r(cache2d(idx)%plan, cache2d(idx)%cin, cache2d(idx)%rout)
+call fftw_execute_dft_c2r(st%plan, st%cin, st%rout)
 !
-real_out(1:nreal) = reshape(cache2d(idx)%rout, [nreal])
+real_out(1:nreal) = reshape(st%rout, [nreal])
 end subroutine backend_c2r_2d
 
 !==============================================================================
 
-subroutine get_cache2d_entry(nx, ny, idx, err_msg)
-! Return the index of the cache entry for (nx, ny), creating it (and its FFTW
-! plan + work buffers) on first use.
+subroutine backend_plan2d_alloc(handle, nx, ny, err_msg)
+! Allocate a 2-D c2r plan (+ work buffers) for size (nx, ny).
+type(c_ptr),      intent(out) :: handle
 integer,          intent(in)  :: nx, ny
-integer,          intent(out) :: idx
 character(len=*), intent(out) :: err_msg
 !
-type(fftw_cache_2d), allocatable :: tmp(:)
-integer :: i, ios, nxh
+type(fftw_state_2d), pointer :: st
+integer :: ios
 !
 err_msg = ''
-idx     = 0
+handle  = c_null_ptr
 !
-! Look for an existing plan of this size.
-do i = 1, n_cache2d
-    if (cache2d(i)%nx == nx .and. cache2d(i)%ny == ny) then
-        idx = i
-        return
-    end if
-end do
-!
-! Grow the cache array if necessary.
-if (.not. allocated(cache2d)) then
-    allocate(cache2d(4), stat=ios)
-    if (ios /= 0) then
-        err_msg = 'swd_fft_backend(fftw): failed to allocate 2-D plan cache'
-        return
-    end if
-else if (n_cache2d == size(cache2d)) then
-    allocate(tmp(2*size(cache2d)), stat=ios)
-    if (ios /= 0) then
-        err_msg = 'swd_fft_backend(fftw): failed to grow 2-D plan cache'
-        return
-    end if
-    tmp(1:n_cache2d) = cache2d(1:n_cache2d)
-    call move_alloc(tmp, cache2d)
+if (nx <= 0 .or. ny <= 0) then
+    write(err_msg, '(a,i0,a,i0)') &
+        'swd_fft_backend(fftw): invalid 2-D size nx=', nx, ' ny=', ny
+    return
 end if
 !
-n_cache2d = n_cache2d + 1
-idx       = n_cache2d
-nxh       = nx/2 + 1
+allocate(st, stat=ios)
+if (ios /= 0) then
+    err_msg = 'swd_fft_backend(fftw): failed to allocate 2-D plan state'
+    return
+end if
 !
-cache2d(idx)%nx = nx
-cache2d(idx)%ny = ny
-allocate(cache2d(idx)%cin(nxh, ny), cache2d(idx)%rout(nx, ny), stat=ios)
+st%nx = nx
+st%ny = ny
+allocate(st%cin(nx/2 + 1, ny), st%rout(nx, ny), stat=ios)
 if (ios /= 0) then
     err_msg = 'swd_fft_backend(fftw): failed to allocate 2-D work buffers'
-    n_cache2d = n_cache2d - 1
+    deallocate(st)
     return
 end if
 !
@@ -326,16 +310,35 @@ end if
 ! row-major terms, [ny][nx/2+1] complex and [ny][nx] real.  FFTW's c2r treats
 ! the LAST (contiguous) axis as the real-transform axis, so the logical FFTW
 ! dimensions are (n0, n1) = (ny, nx): a c2c along y and a c2r along x.
-cache2d(idx)%plan = fftw_plan_dft_c2r_2d(int(ny, c_int), int(nx, c_int),  &
-                                         cache2d(idx)%cin, cache2d(idx)%rout, &
-                                         ior(FFTW_ESTIMATE, FFTW_UNALIGNED))
-if (.not. c_associated(cache2d(idx)%plan)) then
+st%plan = fftw_plan_dft_c2r_2d(int(ny, c_int), int(nx, c_int),  &
+                               st%cin, st%rout,                  &
+                               ior(FFTW_ESTIMATE, FFTW_UNALIGNED))
+if (.not. c_associated(st%plan)) then
     err_msg = 'swd_fft_backend(fftw): FFTW failed to create 2-D c2r plan'
-    deallocate(cache2d(idx)%cin, cache2d(idx)%rout)
-    n_cache2d = n_cache2d - 1
+    deallocate(st%cin, st%rout)
+    deallocate(st)
     return
 end if
-end subroutine get_cache2d_entry
+!
+handle = c_loc(st)
+end subroutine backend_plan2d_alloc
+
+!==============================================================================
+
+subroutine backend_plan2d_free(handle)
+! Free a 2-D plan previously allocated by backend_plan2d_alloc.  No-op if null.
+type(c_ptr), intent(inout) :: handle
+!
+type(fftw_state_2d), pointer :: st
+!
+if (.not. c_associated(handle)) return
+call c_f_pointer(handle, st)
+if (c_associated(st%plan)) call fftw_destroy_plan(st%plan)
+if (allocated(st%cin))  deallocate(st%cin)
+if (allocated(st%rout)) deallocate(st%rout)
+deallocate(st)
+handle = c_null_ptr
+end subroutine backend_plan2d_free
 
 !==============================================================================
 

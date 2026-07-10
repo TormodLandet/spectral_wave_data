@@ -43,8 +43,9 @@ module swd_fft_lib
 !   where N = 2*n is the physical grid size.
 ! ============================================================
 
-use swd_fft_backend, only: backend_plan_alloc, backend_plan_free, &
-                            backend_r2c_1d, backend_c2r_1d, backend_c2r_2d
+use swd_fft_backend, only: backend_plan1d_alloc, backend_plan1d_free, &
+                            backend_r2c_1d, backend_c2r_1d, &
+                            backend_plan2d_alloc, backend_plan2d_free, backend_c2r_2d
 
 use, intrinsic :: iso_c_binding, only: c_double, c_ptr, c_null_ptr
 
@@ -89,7 +90,7 @@ type(swd_fft_plan), intent(out) :: plan
 integer,            intent(in)  :: n
 character(len=*),   intent(out) :: err_msg
 err_msg = ''
-call backend_plan_alloc(plan%handle, n, err_msg)
+call backend_plan1d_alloc(plan%handle, n, err_msg)
 if (err_msg == '') plan%n = n
 end subroutine fft_init
 
@@ -98,7 +99,7 @@ end subroutine fft_init
 subroutine fft_destroy(plan)
 ! Free the plan.  Safe to call on an already-destroyed plan.
 type(swd_fft_plan), intent(inout) :: plan
-call backend_plan_free(plan%handle)   ! no-op for null handle
+call backend_plan1d_free(plan%handle)   ! no-op for null handle
 plan%n = 0
 end subroutine fft_destroy
 
@@ -342,15 +343,26 @@ real(dp), allocatable   :: fE(:, :)
 !
 complex(dp), allocatable :: fhE(:, :)
 complex(dp), allocatable :: fhInt(:, :)
+type(c_ptr) :: plan2d
 character(len=200) :: err_msg
 integer :: nx_int, ny_int
 !
 allocate(fE(nx_out, ny_out))
 !
+! Allocate a 2-D plan for the output grid.
+! NOTE (temporary): this stateless facade function currently creates and frees
+! the plan on every call.  Once Odin's stateful swd_fft object (Layer 1) is
+! merged it will own and reuse the plan across calls; the plan-based backend
+! interface (backend_plan2d_alloc/backend_c2r_2d/backend_plan2d_free) is already
+! in place for that.
+call backend_plan2d_alloc(plan2d, nx_out, ny_out, err_msg)
+if (err_msg /= '') error stop 'irfft2: backend_plan2d_alloc failed'
+!
 ! Fast path: same size — no resampling needed
 if (nx_in == nx_out .and. ny_in == ny_out) then
-    call backend_c2r_2d(nx_out, ny_out, fh, fE, err_msg)
+    call backend_c2r_2d(plan2d, fh, fE, err_msg)
     if (err_msg /= '') error stop 'irfft2: backend_c2r_2d failed (same-size path)'
+    call backend_plan2d_free(plan2d)
     return
 end if
 !
@@ -373,9 +385,10 @@ else
     deallocate(fhInt)
 end if
 !
-call backend_c2r_2d(nx_out, ny_out, fhE, fE, err_msg)
+call backend_c2r_2d(plan2d, fhE, fE, err_msg)
 if (err_msg /= '') error stop 'irfft2: backend_c2r_2d failed'
 !
+call backend_plan2d_free(plan2d)
 deallocate(fhE)
 end function irfft2
 

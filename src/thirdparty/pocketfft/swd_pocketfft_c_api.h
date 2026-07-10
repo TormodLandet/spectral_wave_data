@@ -45,14 +45,31 @@ int swd_rfft_backward(swd_rfft_plan_t plan, const void *in, double *out);
 
 /*
  * 2-D complex-to-real inverse FFT, UNNORMALIZED (scale = 1, matching FFTW c2r).
+ *
+ * Like the 1-D API, this is plan-based: swd_rfft2_plan_create stores the size,
+ * and swd_rfft2_c2r performs the transform.  (PocketFFT caches its own twiddle
+ * tables internally by size, so the plan itself only records nx and ny — but
+ * keeping an explicit plan mirrors the 1-D API and lets the caller own the
+ * plan lifetime on the SWD object rather than in a global cache.)
+ *
  * Fortran column-major (contiguous in x, the real axis):
  *   in  : complex[(nx/2+1) * ny]  (const void* to interleaved double pairs)
  *   out : real[nx * ny]            (double*)
  * For ny = 1 this degenerates to a 1-D unnormalized irfft.
  * The caller is responsible for pre-scaling spectral coefficients.
- * Returns 0 on success, -1 on error.
  */
-int swd_rfft2_c2r(int nx, int ny, const void *in, double *out);
+
+/* Opaque handle to a 2-D real c2r FFT plan (records nx, ny). */
+typedef struct SwdRfft2Plan* swd_rfft2_plan_t;
+
+/* Create a 2-D c2r plan for size (nx, ny).  Returns 0 on success, -1 on error. */
+int swd_rfft2_plan_create(int nx, int ny, swd_rfft2_plan_t *plan_out);
+
+/* Destroy a plan previously created by swd_rfft2_plan_create. */
+void swd_rfft2_plan_destroy(swd_rfft2_plan_t plan);
+
+/* Execute the 2-D c2r transform.  Returns 0 on success, -1 on error. */
+int swd_rfft2_c2r(swd_rfft2_plan_t plan, const void *in, double *out);
 
 #ifdef __cplusplus
 }

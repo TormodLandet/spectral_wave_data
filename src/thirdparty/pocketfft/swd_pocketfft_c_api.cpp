@@ -30,6 +30,15 @@ struct SwdRfftPlan1D {
 };
 
 /* -------------------------------------------------------------------------
+ * Internal 2-D plan structure — records nx and ny.  PocketFFT caches its own
+ * twiddle tables internally by size, so nothing else is needed here.
+ * -------------------------------------------------------------------------*/
+struct SwdRfft2Plan {
+    int nx;
+    int ny;
+};
+
+/* -------------------------------------------------------------------------
  * Public C API
  * -------------------------------------------------------------------------*/
 extern "C" {
@@ -93,11 +102,30 @@ int swd_rfft_backward(swd_rfft_plan_t plan, const void *in, double *out)
     }
 }
 
-int swd_rfft2_c2r(int nx, int ny, const void *in, double *out)
+int swd_rfft2_plan_create(int nx, int ny, swd_rfft2_plan_t *plan_out)
 {
-    if (!in || !out || nx <= 0 || ny <= 0) return -1;
+    if (!plan_out || nx <= 0 || ny <= 0) return -1;
+    try {
+        *plan_out = new SwdRfft2Plan{nx, ny};
+        return 0;
+    } catch (...) {
+        *plan_out = nullptr;
+        return -1;
+    }
+}
+
+void swd_rfft2_plan_destroy(swd_rfft2_plan_t plan)
+{
+    delete plan;   /* delete nullptr is a no-op per C++ standard */
+}
+
+int swd_rfft2_c2r(swd_rfft2_plan_t plan, const void *in, double *out)
+{
+    if (!plan || !in || !out) return -1;
     try {
         using C = std::complex<double>;
+        const int    nx   = plan->nx;
+        const int    ny   = plan->ny;
         const size_t snx  = static_cast<size_t>(nx);
         const size_t sny  = static_cast<size_t>(ny);
         const size_t snxh = snx / 2 + 1;

@@ -18,12 +18,12 @@ program test_swd_fft
 !
 ! Exit code: 0 = all passed, 1 = at least one failure.
 
-use, intrinsic :: iso_c_binding, only: c_double
+use, intrinsic :: iso_c_binding, only: c_double, c_ptr
 use swd_fft_lib,     only: swd_fft_plan, fft_init, fft_destroy, &
                            fft_r2c, fft_c2r, fft_dealias, &
                            fft_resample_up, fft_resample_down, &
                            fft_swd_to_real, fft_real_to_swd, irfft2
-use swd_fft_backend, only: backend_c2r_2d
+use swd_fft_backend, only: backend_plan2d_alloc, backend_plan2d_free, backend_c2r_2d
 
 implicit none
 
@@ -257,6 +257,7 @@ real(dp)    :: f(0:nx-1, 0:ny-1), g(nx, ny)
 complex(dp) :: chat(0:nx/2, 0:ny-1)
 integer  :: px, py
 real(dp) :: max_err
+type(c_ptr) :: plan2d
 
 err_msg = ''
 do py = 0, ny-1
@@ -269,7 +270,8 @@ do py = 0, ny-1
 end do
 
 call forward_half_2d(f, nx, ny, chat)
-call backend_c2r_2d(nx, ny, chat, g, err_msg)
+call backend_plan2d_alloc(plan2d, nx, ny, err_msg)
+call backend_c2r_2d(plan2d, chat, g, err_msg)
 call check('backend_c2r_2d no error', err_msg == '', failures)
 
 max_err = 0.0_dp
@@ -280,6 +282,7 @@ do py = 0, ny-1
 end do
 call check('backend_c2r_2d matches brute-force DFT (err < 1e-8)', &
            max_err < 1.0e-8_dp, failures)
+call backend_plan2d_free(plan2d)
 end subroutine test_backend_c2r_2d
 
 !------------------------------------------------------------------------------
@@ -294,6 +297,7 @@ real(dp)    :: f(0:nx-1, 0:ny-1), g(nx, ny)
 complex(dp) :: chat(0:nx/2, 0:ny-1)
 integer  :: px
 real(dp) :: max_err
+type(c_ptr) :: plan2d
 
 err_msg = ''
 do px = 0, nx-1
@@ -302,7 +306,8 @@ do px = 0, nx-1
 end do
 
 call forward_half_2d(f, nx, ny, chat)
-call backend_c2r_2d(nx, ny, chat, g, err_msg)
+call backend_plan2d_alloc(plan2d, nx, ny, err_msg)
+call backend_c2r_2d(plan2d, chat, g, err_msg)
 call check('backend_c2r_2d(ny=1) no error', err_msg == '', failures)
 
 max_err = 0.0_dp
@@ -311,6 +316,7 @@ do px = 0, nx-1
 end do
 call check('backend_c2r_2d(ny=1) matches brute-force DFT (err < 1e-8)', &
            max_err < 1.0e-8_dp, failures)
+call backend_plan2d_free(plan2d)
 end subroutine test_backend_c2r_2d_ny1
 
 !------------------------------------------------------------------------------
@@ -328,6 +334,7 @@ complex(dp) :: chat(0:nxc/2, 0:nyc-1)
 real(dp), allocatable :: fine(:,:)
 integer  :: px, py
 real(dp) :: max_err
+type(c_ptr) :: plan2d
 
 err_msg = ''
 do py = 0, nyc-1
@@ -339,7 +346,8 @@ do py = 0, nyc-1
 end do
 
 call forward_half_2d(f, nxc, nyc, chat)
-call backend_c2r_2d(nxc, nyc, chat, base, err_msg)
+call backend_plan2d_alloc(plan2d, nxc, nyc, err_msg)
+call backend_c2r_2d(plan2d, chat, base, err_msg)
 call check('irfft2 zeropad: base transform no error', err_msg == '', failures)
 
 fine = irfft2(chat, nxc, nyc, nxf, nyf)
@@ -355,6 +363,7 @@ do py = 0, nyc-1
 end do
 call check('irfft2 zeropad matches at coincident points (err < 1e-8)', &
            max_err < 1.0e-8_dp, failures)
+call backend_plan2d_free(plan2d)
 end subroutine test_irfft2_zeropad
 
 !------------------------------------------------------------------------------
@@ -373,6 +382,7 @@ complex(dp) :: chat(0:nxb/2, 0:nyb-1)
 real(dp), allocatable :: small(:,:)
 integer  :: px, py
 real(dp) :: max_err
+type(c_ptr) :: plan2d
 
 err_msg = ''
 ! Band-limited to |kx| <= 3 < nxs/2 and |ky| <= 2 < nys/2 so truncation is exact.
@@ -386,7 +396,8 @@ do py = 0, nyb-1
 end do
 
 call forward_half_2d(fb, nxb, nyb, chat)
-call backend_c2r_2d(nxb, nyb, chat, base, err_msg)
+call backend_plan2d_alloc(plan2d, nxb, nyb, err_msg)
+call backend_c2r_2d(plan2d, chat, base, err_msg)
 call check('irfft2 truncate: base transform no error', err_msg == '', failures)
 
 small = irfft2(chat, nxb, nyb, nxs, nys)
@@ -402,6 +413,7 @@ do py = 0, nys-1
 end do
 call check('irfft2 truncate matches at coincident points (err < 1e-8)', &
            max_err < 1.0e-8_dp, failures)
+call backend_plan2d_free(plan2d)
 end subroutine test_irfft2_truncate
 
 end program test_swd_fft
