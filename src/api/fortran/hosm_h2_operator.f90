@@ -15,7 +15,7 @@ module hosm_h2_operator_def
 ! with some minor extensions by Tormod Landet (both also from DNV).
 
 use, intrinsic :: iso_c_binding, only: c_double
-use swd_fft_def, only: swd_fft_plan, fft_init, fft_destroy, &
+use swd_fft_lib, only: swd_fft_plan, fft_init, fft_destroy, &
                        fft_r2c, fft_c2r, fft_dealias, &
                        fft_resample_up, fft_resample_down, &
                        fft_swd_to_real, fft_real_to_swd

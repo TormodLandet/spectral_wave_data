@@ -31,7 +31,7 @@ use multilayer_long_crested_def, only: multilayer_state, multilayer_init, multil
     multilayer_apply_window, multilayer_phi, multilayer_stream, multilayer_phi_t, &
     multilayer_grad_phi, multilayer_elev, multilayer_elev_t, &
     multilayer_grad_elev, multilayer_grad_elev_2nd, multilayer_pressure
-use swd_fft_def,            only: swd_fft_plan, fft_init, fft_destroy, &
+use swd_fft_lib,            only: swd_fft_plan, fft_init, fft_destroy, &
                                   fft_swd_to_real
 use hosm_h2_operator_def,   only: h2op_state, h2op_init, h2op_close, &
                                   h2op_calc_potential, h2op_convert_to_swd_layers
