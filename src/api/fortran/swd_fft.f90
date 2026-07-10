@@ -1,7 +1,7 @@
 module swd_fft_def
 
 use kind_values, only: wp => kind_swd_internal
-use swd_fft_fftw3, only : irfft2  ! alternatively, use/write another FFT-module that implements a irfft2-routine
+use swd_fft_lib, only : irfft2  ! backend-neutral 2-D inverse FFT (PocketFFT or FFTW via swd_fft_backend)
 use spectral_wave_data_error, only: swd_error
 
 implicit none

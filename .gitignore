@@ -2,6 +2,8 @@
 **/*.bak
 **/.pytest_cache
 **/__pycache__
+tmp_*
+*~
 .vscode
 .idea
 build

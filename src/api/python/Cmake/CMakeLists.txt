@@ -28,6 +28,16 @@ set(SRC_API_F
     ${DIR_SRC_API_PY}/kind_values.f90
 )
 
-add_library(${LIB} SHARED ${SRC_API_F})
+# The FFT methods elev_fft, grad_phi_fft, and xy_fft return Fortran allocatable
+# arrays to Python via C descriptors (ISO_Fortran_binding).  Compile the thin C
+# wrapper that allocates and returns those descriptors.  ISO_Fortran_binding.h
+# ships with the Fortran compiler and is found automatically on the C compiler's
+# default include path (same toolchain).
+set(SRC_API_C
+    ${DIR_SRC_API_C}/spectral_wave_data.c
+)
+
+add_library(${LIB} SHARED ${SRC_API_F} ${SRC_API_C})
+target_include_directories(${LIB} PRIVATE ${DIR_SRC_API_C})
 target_include_directories(${LIB} INTERFACE ${DIR_SRC_API_C})
 swd_fft_enable_for_target(${LIB})

@@ -917,12 +917,13 @@ class SpectralWaveData:
 
         """
         # get the fortran-array-object (see ISO_Fortran_binding.h/ISO_Fortran_binding.py)
-        CFI_obj = swdlib.swd_api_elev_fft(self.obj, nx_fft, ny_fft)    
-        
-        if swdlib.swd_api_error_raised(self.obj):
-            id = swdlib.swd_api_error_get_id(self.obj)
-            msg = swdlib.swd_api_error_get_msg(self.obj).decode()
-            swdlib.swd_api_error_clear(self.obj) # To simplify safe recovery...
+        obj = self.ctypes_object
+        CFI_obj = swdlib.swd_api_elev_fft(obj, nx_fft, ny_fft)
+
+        if swdlib.swd_api_error_raised(obj):
+            id = swdlib.swd_api_error_get_id(obj)
+            msg = swdlib.swd_api_error_get_msg(obj).decode()
+            swdlib.swd_api_error_clear(obj)  # To simplify safe recovery...
             if id == 1004:
                 raise SwdInputValueError(msg)
             else:
@@ -967,12 +968,13 @@ class SpectralWaveData:
 
         """
         # get the fortran-array-object (see ISO_Fortran_binding.h/ISO_Fortran_binding.py)
-        CFI_obj = swdlib.swd_api_grad_phi_fft(self.obj, z, nx_fft, ny_fft)    
-        
-        if swdlib.swd_api_error_raised(self.obj):
-            id = swdlib.swd_api_error_get_id(self.obj)
-            msg = swdlib.swd_api_error_get_msg(self.obj).decode()
-            swdlib.swd_api_error_clear(self.obj) # To simplify safe recovery...
+        obj = self.ctypes_object
+        CFI_obj = swdlib.swd_api_grad_phi_fft(obj, z, nx_fft, ny_fft)
+
+        if swdlib.swd_api_error_raised(obj):
+            id = swdlib.swd_api_error_get_id(obj)
+            msg = swdlib.swd_api_error_get_msg(obj).decode()
+            swdlib.swd_api_error_clear(obj)  # To simplify safe recovery...
             if id == 1004:
                 raise SwdInputValueError(msg)
             else:
@@ -1016,13 +1018,14 @@ class SpectralWaveData:
 
         """
         # get the fortran-array objects (see ISO_Fortran_binding.h/ISO_Fortran_binding.py)
-        CFI_obj_x = swdlib.swd_api_x_fft(self.obj, nx_fft, ny_fft)
-        CFI_obj_y = swdlib.swd_api_y_fft(self.obj, nx_fft, ny_fft)
-        
-        if swdlib.swd_api_error_raised(self.obj):
-            id = swdlib.swd_api_error_get_id(self.obj)
-            msg = swdlib.swd_api_error_get_msg(self.obj).decode()
-            swdlib.swd_api_error_clear(self.obj) # To simplify safe recovery...
+        obj = self.ctypes_object
+        CFI_obj_x = swdlib.swd_api_x_fft(obj, nx_fft, ny_fft)
+        CFI_obj_y = swdlib.swd_api_y_fft(obj, nx_fft, ny_fft)
+
+        if swdlib.swd_api_error_raised(obj):
+            id = swdlib.swd_api_error_get_id(obj)
+            msg = swdlib.swd_api_error_get_msg(obj).decode()
+            swdlib.swd_api_error_clear(obj)  # To simplify safe recovery...
             if id == 1004:
                 raise SwdInputValueError(msg)
             else:

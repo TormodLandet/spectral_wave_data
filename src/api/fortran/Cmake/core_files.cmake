@@ -1,6 +1,7 @@
 # All the Fortran implementation source files except kind_values.f90
 set(SRC_CORE
   ${DIR_SRC_API_F}/swd_fft_lib.f90
+  ${DIR_SRC_API_F}/swd_fft.f90
   ${DIR_SRC_API_F}/hosm_h2_operator.f90
   ${DIR_SRC_API_F}/multilayer_long_crested.f90
   ${DIR_SRC_API_F}/spectral_wave_data_shape_1_or_2_impl_7.f90

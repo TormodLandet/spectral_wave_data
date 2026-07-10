@@ -52,6 +52,8 @@ contains
     procedure :: get_logical
     procedure :: get_real
     procedure :: get_chr
+    procedure :: elev_fft           ! Surface elevation on a regular grid using FFT (not implemented)
+    procedure :: grad_phi_fft       ! Grad phi on a regular grid using FFT (not implemented)
 end type spectral_wave_data_shape_7_impl_1
 
 interface spectral_wave_data_shape_7_impl_1
@@ -661,6 +663,41 @@ case default
     call self % error % set_id_msg(err_proc, 1004, err_msg)
 end select
 end function get_chr
+
+!==============================================================================
+
+function elev_fft(self, nx_fft_in, ny_fft_in) result(elev)
+class(spectral_wave_data_shape_7_impl_1), intent(inout) :: self ! Actual class
+integer, optional, intent(in) :: nx_fft_in, ny_fft_in
+real(knd), allocatable :: elev(:, :)
+character(len=*), parameter :: err_proc = 'spectral_wave_data_shape_7_impl_1::elev_fft'
+character(len=:), allocatable :: err_msg(:)
+
+allocate(elev(1,1))
+elev = huge(elev)
+
+err_msg = ["not implemented"]
+call self % error % set_id_msg(err_proc, 1004, err_msg)
+
+end function elev_fft
+
+!==============================================================================
+
+function grad_phi_fft(self, z, nx_fft_in, ny_fft_in) result(grad_phi)
+class(spectral_wave_data_shape_7_impl_1), intent(inout) :: self ! Actual class
+real(wp), intent(in) :: z
+integer, optional, intent(in) :: nx_fft_in, ny_fft_in
+real(knd), allocatable :: grad_phi(:, :, :)
+character(len=*), parameter :: err_proc = 'spectral_wave_data_shape_7_impl_1::grad_phi_fft'
+character(len=:), allocatable :: err_msg(:)
+
+allocate(grad_phi(1,1,1))
+grad_phi = huge(grad_phi)
+
+err_msg = ["not implemented"]
+call self % error % set_id_msg(err_proc, 1004, err_msg)
+
+end function grad_phi_fft
 
 !==============================================================================
 
