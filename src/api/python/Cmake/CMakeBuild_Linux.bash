@@ -1,5 +1,7 @@
 rm -rf Build_Linux
 mkdir Build_Linux
 cd Build_Linux
-cmake -DCMAKE_Fortran_COMPILER=gfortran ..
+cmake -DCMAKE_Fortran_COMPILER=gfortran \
+      -DSWD_FFT_BACKEND=${SWD_FFT_BACKEND:-POCKETFFT} \
+      ..
 make

@@ -8,17 +8,32 @@ env:
 
 jobs:
   build_wheel:
-    name: Build oldest supported manylinux wheel
+    name: Build ${{ matrix.backend }} wheel (manylinux)
     runs-on: ubuntu-latest
     #container: quay.io/pypa/manylinux2014_x86_64  # Fails to run on GitHub Actions, too old libc
     container: quay.io/pypa/manylinux_2_28_x86_64  # GCC version 14, Redhat 8 / Ubuntu 18.10
-    
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # POCKETFFT first: it is the default and produces the shipped wheel.
+        # FFTW second: build + test only; wheel is uploaded for debugging but NOT shipped
+        backend: [POCKETFFT, FFTW]
+
     steps:
       - uses: actions/checkout@v7
+
+      - name: Install FFTW development libraries (FFTW backend only)
+        if: matrix.backend == 'FFTW'
+        run: |
+          # The manylinux_2_28 container is RHEL 8 based so we use dnf
+          dnf install -y fftw-devel
 
       - name: Compile the SWD Fortran library
         run: |
           cd src/api/python/Cmake
+          # CMakeBuild_Linux.bash forwards SWD_FFT_BACKEND to cmake via the env var
+          export SWD_FFT_BACKEND=${{ matrix.backend }}
           bash ./CMakeBuild_Linux.bash
 
       - name: Install uv
@@ -80,7 +95,10 @@ jobs:
       - name: Build and run Fortran FFT unit tests
         run: |
           cd tests/fortran/fft/Cmake
-          cmake -B build -DCMAKE_BUILD_TYPE=Release .
+          cmake -B build \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DSWD_FFT_BACKEND=${{ matrix.backend }} \
+                .
           cmake --build build
           cd build && ctest --output-on-failure
 
@@ -94,8 +112,16 @@ jobs:
           export SWD_TEST_TYPE=quick
           python -m pytest -v
 
-      - name: Upload the newly built Python wheel for manylinux_2_28_x86_64 to GitHub artifacts
+      - name: Upload the PocketFFT wheel (default, used for wheel file releases)
+        if: matrix.backend == 'POCKETFFT'
         uses: actions/upload-artifact@v7
         with:
           name: python_wheel_for_manylinux_2_28_x86_64
+          path: ${{ env.WHEEL_FILE }}
+
+      - name: Upload the FFTW wheel (for DEBUG, DO NOT SHIP, causes SWD to have GPL license)
+        if: matrix.backend == 'FFTW'
+        uses: actions/upload-artifact@v7
+        with:
+          name: python_wheel_manylinux_2_28_x86_64_FFTW_DO_NOT_SHIP_is_GPL_licensed_not_MIT
           path: ${{ env.WHEEL_FILE }}

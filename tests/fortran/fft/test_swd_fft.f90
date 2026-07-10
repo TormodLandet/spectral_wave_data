@@ -1,23 +1,34 @@
 program test_swd_fft
-! Unit tests for the swd_fft_def module.
+! Unit tests for the SWD FFT stack (swd_fft_lib + the compiled swd_fft_backend).
+!
+! These tests are backend-independent: they pass with either
+! -DSWD_FFT_BACKEND=POCKETFFT or -DSWD_FFT_BACKEND=FFTW, and the 2-D tests use a
+! brute-force DFT as ground truth so they also verify that the two backends
+! agree with each other (and with the documented axis/scale conventions).
 !
 ! Tests:
 !   1. fft_r2c / fft_c2r round-trip recovers the original signal
 !   2. fft_resample_up followed by fft_resample_down recovers the original signal
 !   3. fft_swd_to_real / fft_real_to_swd round-trip recovers the coefficients
 !   4. fft_dealias zeroes spectral modes above the cutoff
+!   5. backend_c2r_2d matches a brute-force unnormalized inverse DFT (nx /= ny)
+!   6. backend_c2r_2d with ny = 1 matches the brute-force 1-D case
+!   7. irfft2 up-sampling (zero-pad) reproduces the field at coincident points
+!   8. irfft2 down-sampling (truncate) reproduces a band-limited field
 !
 ! Exit code: 0 = all passed, 1 = at least one failure.
 
 use, intrinsic :: iso_c_binding, only: c_double
-use swd_fft_def, only: swd_fft_plan, fft_init, fft_destroy, &
-                       fft_r2c, fft_c2r, fft_dealias, &
-                       fft_resample_up, fft_resample_down, &
-                       fft_swd_to_real, fft_real_to_swd
+use swd_fft_lib,     only: swd_fft_plan, fft_init, fft_destroy, &
+                           fft_r2c, fft_c2r, fft_dealias, &
+                           fft_resample_up, fft_resample_down, &
+                           fft_swd_to_real, fft_real_to_swd, irfft2
+use swd_fft_backend, only: backend_c2r_2d
 
 implicit none
 
 integer, parameter :: dp = c_double
+real(dp), parameter :: twopi = 2.0_dp * 3.14159265358979323846_dp
 integer :: failures
 character(len=200) :: err_msg
 
@@ -27,6 +38,10 @@ call test_r2c_c2r_roundtrip(failures, err_msg)
 call test_resample_roundtrip(failures, err_msg)
 call test_swd_real_roundtrip(failures, err_msg)
 call test_dealias(failures, err_msg)
+call test_backend_c2r_2d(failures, err_msg)
+call test_backend_c2r_2d_ny1(failures, err_msg)
+call test_irfft2_zeropad(failures, err_msg)
+call test_irfft2_truncate(failures, err_msg)
 
 if (failures == 0) then
     write(*,'(a)') 'ALL FFT UNIT TESTS PASSED'
@@ -200,5 +215,193 @@ call check('dealias zeroes high modes (energy < 1e-20)', energy_high < 1.0e-20_d
 call fft_destroy(plan_hi)
 call fft_destroy(plan_lo)
 end subroutine test_dealias
+
+!------------------------------------------------------------------------------
+! Ground-truth helper: unnormalized forward 2-D DFT of a real field, returning
+! the half spectrum chat(0:nx/2, 0:ny-1) in the convention used by the backend:
+!   real axis = x = first (column-major) index, reduced to nx/2+1; y = full.
+!   chat(kx,ky) = sum_{px,py} f(px,py) * exp(-2*pi*i (kx*px/nx + ky*py/ny))
+! The matching unnormalized inverse (backend_c2r_2d) therefore returns nx*ny*f.
+!------------------------------------------------------------------------------
+subroutine forward_half_2d(f, nx, ny, chat)
+integer,     intent(in)  :: nx, ny
+real(dp),    intent(in)  :: f(0:nx-1, 0:ny-1)
+complex(dp), intent(out) :: chat(0:nx/2, 0:ny-1)
+integer :: kx, ky, px, py
+real(dp) :: ang
+complex(dp) :: acc
+do ky = 0, ny-1
+    do kx = 0, nx/2
+        acc = cmplx(0.0_dp, 0.0_dp, dp)
+        do py = 0, ny-1
+            do px = 0, nx-1
+                ang = -twopi * (real(kx,dp)*px/nx + real(ky,dp)*py/ny)
+                acc = acc + f(px,py) * cmplx(cos(ang), sin(ang), dp)
+            end do
+        end do
+        chat(kx,ky) = acc
+    end do
+end do
+end subroutine forward_half_2d
+
+!------------------------------------------------------------------------------
+! Test 5: backend_c2r_2d matches the brute-force unnormalized inverse DFT.
+! Uses nx /= ny so that any accidental x/y transpose is caught.
+!------------------------------------------------------------------------------
+subroutine test_backend_c2r_2d(failures, err_msg)
+integer,          intent(inout) :: failures
+character(len=*), intent(out)   :: err_msg
+
+integer, parameter :: nx = 8, ny = 6
+real(dp)    :: f(0:nx-1, 0:ny-1), g(nx, ny)
+complex(dp) :: chat(0:nx/2, 0:ny-1)
+integer  :: px, py
+real(dp) :: max_err
+
+err_msg = ''
+do py = 0, ny-1
+    do px = 0, nx-1
+        f(px,py) = 1.3_dp + 0.7_dp*cos(twopi*(1.0_dp*px/nx))            &
+                 + 0.5_dp*sin(twopi*(2.0_dp*py/ny))                     &
+                 + 0.4_dp*cos(twopi*(1.0_dp*px/nx + 1.0_dp*py/ny))      &
+                 + 0.2_dp*cos(twopi*(3.0_dp*px/nx - 2.0_dp*py/ny))
+    end do
+end do
+
+call forward_half_2d(f, nx, ny, chat)
+call backend_c2r_2d(nx, ny, chat, g, err_msg)
+call check('backend_c2r_2d no error', err_msg == '', failures)
+
+max_err = 0.0_dp
+do py = 0, ny-1
+    do px = 0, nx-1
+        max_err = max(max_err, abs(g(px+1,py+1) - real(nx*ny,dp)*f(px,py)))
+    end do
+end do
+call check('backend_c2r_2d matches brute-force DFT (err < 1e-8)', &
+           max_err < 1.0e-8_dp, failures)
+end subroutine test_backend_c2r_2d
+
+!------------------------------------------------------------------------------
+! Test 6: backend_c2r_2d degenerates correctly to a 1-D transform for ny = 1.
+!------------------------------------------------------------------------------
+subroutine test_backend_c2r_2d_ny1(failures, err_msg)
+integer,          intent(inout) :: failures
+character(len=*), intent(out)   :: err_msg
+
+integer, parameter :: nx = 8, ny = 1
+real(dp)    :: f(0:nx-1, 0:ny-1), g(nx, ny)
+complex(dp) :: chat(0:nx/2, 0:ny-1)
+integer  :: px
+real(dp) :: max_err
+
+err_msg = ''
+do px = 0, nx-1
+    f(px,0) = 0.9_dp + 0.6_dp*cos(twopi*(1.0_dp*px/nx))    &
+            + 0.3_dp*sin(twopi*(3.0_dp*px/nx))
+end do
+
+call forward_half_2d(f, nx, ny, chat)
+call backend_c2r_2d(nx, ny, chat, g, err_msg)
+call check('backend_c2r_2d(ny=1) no error', err_msg == '', failures)
+
+max_err = 0.0_dp
+do px = 0, nx-1
+    max_err = max(max_err, abs(g(px+1,1) - real(nx*ny,dp)*f(px,0)))
+end do
+call check('backend_c2r_2d(ny=1) matches brute-force DFT (err < 1e-8)', &
+           max_err < 1.0e-8_dp, failures)
+end subroutine test_backend_c2r_2d_ny1
+
+!------------------------------------------------------------------------------
+! Test 7: irfft2 up-sampling (zero-pad).  Doubling nx and ny must reproduce the
+! same continuous field; the coarse-grid samples coincide with every other
+! fine-grid sample.  ny is even, exercising the Nyquist-splitting path.
+!------------------------------------------------------------------------------
+subroutine test_irfft2_zeropad(failures, err_msg)
+integer,          intent(inout) :: failures
+character(len=*), intent(out)   :: err_msg
+
+integer, parameter :: nxc = 8, nyc = 6, nxf = 16, nyf = 12
+real(dp)    :: f(0:nxc-1, 0:nyc-1), base(nxc, nyc)
+complex(dp) :: chat(0:nxc/2, 0:nyc-1)
+real(dp), allocatable :: fine(:,:)
+integer  :: px, py
+real(dp) :: max_err
+
+err_msg = ''
+do py = 0, nyc-1
+    do px = 0, nxc-1
+        f(px,py) = 1.1_dp + 0.6_dp*cos(twopi*(1.0_dp*px/nxc))          &
+                 + 0.4_dp*sin(twopi*(2.0_dp*py/nyc))                   &
+                 + 0.3_dp*cos(twopi*(2.0_dp*px/nxc + 1.0_dp*py/nyc))
+    end do
+end do
+
+call forward_half_2d(f, nxc, nyc, chat)
+call backend_c2r_2d(nxc, nyc, chat, base, err_msg)
+call check('irfft2 zeropad: base transform no error', err_msg == '', failures)
+
+fine = irfft2(chat, nxc, nyc, nxf, nyf)
+call check('irfft2 zeropad: output shape', &
+           size(fine,1) == nxf .and. size(fine,2) == nyf, failures)
+
+! Coarse point (px,py) coincides with fine point (2*px, 2*py).
+max_err = 0.0_dp
+do py = 0, nyc-1
+    do px = 0, nxc-1
+        max_err = max(max_err, abs(fine(2*px+1, 2*py+1) - base(px+1, py+1)))
+    end do
+end do
+call check('irfft2 zeropad matches at coincident points (err < 1e-8)', &
+           max_err < 1.0e-8_dp, failures)
+end subroutine test_irfft2_zeropad
+
+!------------------------------------------------------------------------------
+! Test 8: irfft2 down-sampling (truncate).  A field band-limited below both the
+! coarse and fine Nyquist frequencies is sampled losslessly on the coarse grid.
+! nx and ny are both even on the fine grid, exercising the Nyquist-recombine
+! path in swd_truncate (the line fixed during the facade refactor).
+!------------------------------------------------------------------------------
+subroutine test_irfft2_truncate(failures, err_msg)
+integer,          intent(inout) :: failures
+character(len=*), intent(out)   :: err_msg
+
+integer, parameter :: nxb = 16, nyb = 12, nxs = 8, nys = 6
+real(dp)    :: fb(0:nxb-1, 0:nyb-1), base(nxb, nyb)
+complex(dp) :: chat(0:nxb/2, 0:nyb-1)
+real(dp), allocatable :: small(:,:)
+integer  :: px, py
+real(dp) :: max_err
+
+err_msg = ''
+! Band-limited to |kx| <= 3 < nxs/2 and |ky| <= 2 < nys/2 so truncation is exact.
+do py = 0, nyb-1
+    do px = 0, nxb-1
+        fb(px,py) = 1.0_dp + 0.7_dp*cos(twopi*(1.0_dp*px/nxb))         &
+                  + 0.5_dp*sin(twopi*(3.0_dp*px/nxb))                  &
+                  + 0.4_dp*cos(twopi*(2.0_dp*py/nyb))                  &
+                  + 0.3_dp*cos(twopi*(3.0_dp*px/nxb + 2.0_dp*py/nyb))
+    end do
+end do
+
+call forward_half_2d(fb, nxb, nyb, chat)
+call backend_c2r_2d(nxb, nyb, chat, base, err_msg)
+call check('irfft2 truncate: base transform no error', err_msg == '', failures)
+
+small = irfft2(chat, nxb, nyb, nxs, nys)
+call check('irfft2 truncate: output shape', &
+           size(small,1) == nxs .and. size(small,2) == nys, failures)
+
+! Small point (px,py) coincides with big point (2*px, 2*py).
+max_err = 0.0_dp
+do py = 0, nys-1
+    do px = 0, nxs-1
+        max_err = max(max_err, abs(small(px+1, py+1) - base(2*px+1, 2*py+1)))
+    end do
+end do
+call check('irfft2 truncate matches at coincident points (err < 1e-8)', &
+           max_err < 1.0e-8_dp, failures)
+end subroutine test_irfft2_truncate
 
 end program test_swd_fft

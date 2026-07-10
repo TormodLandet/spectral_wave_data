@@ -1,6 +1,6 @@
 # All the Fortran implementation source files except kind_values.f90
 set(SRC_CORE
-  ${DIR_SRC_API_F}/swd_fft.f90
+  ${DIR_SRC_API_F}/swd_fft_lib.f90
   ${DIR_SRC_API_F}/hosm_h2_operator.f90
   ${DIR_SRC_API_F}/multilayer_long_crested.f90
   ${DIR_SRC_API_F}/spectral_wave_data_shape_1_or_2_impl_7.f90
@@ -26,23 +26,19 @@ set(SRC_CORE
   ${DIR_SRC_API_F}/swd_version.f90
 )
 
-# You need to define DIR_SRC_API_F before include()-ing this file
+# You need to define DIR_THIRDPARTY before including swd_fft.cmake
+# so that it can locate the vendored PocketFFT sources.
 set(DIR_THIRDPARTY ${DIR_SRC_API_F}/../../thirdparty)
 
-# The following option is used to include the vendored PocketFFT library in the build.
-# In the future we may want to support other FFT libraries (e.g. FFTW3, MKL) by
-# adding new options here and providing a matching swd_enable_fft() implementation.
-option(USE_POCKETFFT "Use the vendored PocketFFT library" ON)
-if(USE_POCKETFFT)
-    set(SRC_CORE
-        ${SRC_CORE}
-        ${DIR_THIRDPARTY}/pocketfft/swd_pocketfft_c_api.cpp
-    )
-endif()
-
-# Include the shared FFT helper function swd_enable_fft(target).
-# Call this on every library/executable that is built from SRC_CORE.
+# Include the shared FFT helper functions:
+# * swd_fft_define_sources(source_list_variable)
+# * swd_fft_enable_for_target(target)
+# Call the last one on every library/executable using SWD's FFT lib.
 include(${CMAKE_CURRENT_LIST_DIR}/swd_fft.cmake)
+
+# Add the FFT backend sources to the core source list.
+swd_fft_define_sources(SRC_FFT)
+list(APPEND SRC_CORE ${SRC_FFT})
 
 # Bundle the Intel compiler libraries when compiling shared libraries
 if (CMAKE_Fortran_COMPILER_ID STREQUAL "Intel")

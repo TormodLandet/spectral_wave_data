@@ -43,6 +43,17 @@ int swd_rfft_forward(swd_rfft_plan_t plan, const double *in, void *out);
  */
 int swd_rfft_backward(swd_rfft_plan_t plan, const void *in, double *out);
 
+/*
+ * 2-D complex-to-real inverse FFT, UNNORMALIZED (scale = 1, matching FFTW c2r).
+ * Fortran column-major (contiguous in x, the real axis):
+ *   in  : complex[(nx/2+1) * ny]  (const void* to interleaved double pairs)
+ *   out : real[nx * ny]            (double*)
+ * For ny = 1 this degenerates to a 1-D unnormalized irfft.
+ * The caller is responsible for pre-scaling spectral coefficients.
+ * Returns 0 on success, -1 on error.
+ */
+int swd_rfft2_c2r(int nx, int ny, const void *in, double *out);
+
 #ifdef __cplusplus
 }
 #endif

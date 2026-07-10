@@ -23,6 +23,6 @@ set(SRC_APP
 )
 
 add_library(${LIB} ${LIBTYPE} ${SRC_SWDLIB})
-swd_enable_fft(${LIB})
+swd_fft_enable_for_target(${LIB})
 add_executable(${PROG} ${SRC_APP})
 target_link_libraries(${PROG} PRIVATE ${LIB}) 

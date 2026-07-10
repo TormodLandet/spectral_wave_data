@@ -18,7 +18,7 @@ set(SRC_LIB
 )
 
 add_library(swd_fft_test_lib STATIC ${SRC_LIB})
-swd_enable_fft(swd_fft_test_lib)
+swd_fft_enable_for_target(swd_fft_test_lib)
 
 add_executable(${TEST_NAME} ${DIR_TESTS_FFT}/test_swd_fft.f90)
 target_link_libraries(${TEST_NAME} PRIVATE swd_fft_test_lib)

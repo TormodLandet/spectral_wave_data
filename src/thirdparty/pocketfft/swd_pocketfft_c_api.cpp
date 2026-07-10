@@ -93,4 +93,40 @@ int swd_rfft_backward(swd_rfft_plan_t plan, const void *in, double *out)
     }
 }
 
+int swd_rfft2_c2r(int nx, int ny, const void *in, double *out)
+{
+    if (!in || !out || nx <= 0 || ny <= 0) return -1;
+    try {
+        using C = std::complex<double>;
+        const size_t snx  = static_cast<size_t>(nx);
+        const size_t sny  = static_cast<size_t>(ny);
+        const size_t snxh = snx / 2 + 1;
+
+        // Fortran column-major layout: axis 0 is x (contiguous, fastest varying),
+        // axis 1 is y.  The half-spectrum has shape (nx/2+1, ny).
+        //
+        // PocketFFT c2r with multiple axes:
+        //   "first carry out a c2c transform along all axes except the last one,
+        //    then a c2r transform on the last axis in axes"
+        // We want c2r on x (axis 0) and c2c on y (axis 1).
+        // => axes = {1, 0}: c2c on y first, then c2r on x.
+        // For ny = 1 the c2c on axis 1 is a trivial no-op (single element).
+        pocketfft::shape_t  shape_out {snx,            sny};
+        pocketfft::stride_t stride_in {static_cast<ptrdiff_t>(sizeof(C)),
+                                       static_cast<ptrdiff_t>(sizeof(C) * snxh)};
+        pocketfft::stride_t stride_out{static_cast<ptrdiff_t>(sizeof(double)),
+                                       static_cast<ptrdiff_t>(sizeof(double) * snx)};
+        pocketfft::shape_t  axes      {1, 0};
+
+        pocketfft::c2r(shape_out, stride_in, stride_out, axes,
+                       /*forward=*/false,
+                       reinterpret_cast<const C *>(in), out,
+                       /*fct=*/1.0,   // unnormalized: scale=1 (caller pre-scales coefficients)
+                       /*nthreads=*/1);
+        return 0;
+    } catch (...) {
+        return -1;
+    }
+}
+
 } /* extern "C" */

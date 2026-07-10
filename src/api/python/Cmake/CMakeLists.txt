@@ -30,4 +30,4 @@ set(SRC_API_F
 
 add_library(${LIB} SHARED ${SRC_API_F})
 target_include_directories(${LIB} INTERFACE ${DIR_SRC_API_C})
-swd_enable_fft(${LIB})
+swd_fft_enable_for_target(${LIB})
