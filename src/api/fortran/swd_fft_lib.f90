@@ -394,16 +394,13 @@ end function irfft2
 
 !==============================================================================
 ! Private spectral resampling helpers
-! Based on Odin Gramstad's zeropad / truncate from swd_fft_fftw3.f90; ported
-! to subroutine form and placed here so the logic is shared by both backends.
-! Nyquist-frequency splitting/combining is handled correctly (verified against
-! scipy.signal.resample in Odin's original test suite).
-! DC is assumed zero for ocean wave data; it is copied correctly regardless.
 !==============================================================================
 
 subroutine swd_zeropad(fh, nx, ny, fhE, nxE, nyE)
 ! Zero-pad fh(nx/2+1, ny) into fhE(nxE/2+1, nyE) for upsampling (nxE>=nx, nyE>=ny).
 ! Corresponds to evaluating the same continuous signal on a finer spatial grid.
+! Based on Odin Gramstad's zeropad from swd_fft_fftw3.f90 and ported later
+! to subroutine form to be shared shared by both FFT backends.
 complex(dp), intent(in)  :: fh(nx/2+1, ny)
 integer,     intent(in)  :: nx, ny
 complex(dp), intent(out) :: fhE(nxE/2+1, nyE)
@@ -450,6 +447,8 @@ end subroutine swd_zeropad
 subroutine swd_truncate(fhE, nxE, nyE, fh, nx, ny)
 ! Truncate fhE(nxE/2+1, nyE) into fh(nx/2+1, ny) for downsampling (nxE>=nx, nyE>=ny).
 ! Keeps only the frequency content within the bandwidth of the coarser grid.
+! Based on Odin Gramstad's truncate from swd_fft_fftw3.f90 and ported later
+! to subroutine form to be shared shared by both FFT backends.
 complex(dp), intent(in)  :: fhE(nxE/2+1, nyE)
 integer,     intent(in)  :: nxE, nyE
 complex(dp), intent(out) :: fh(nx/2+1, ny)
@@ -479,10 +478,12 @@ else
         fh(1:nxh, nyh + 1 : ny) = fhE(1:nxh, nyE - nyh + 2 : nyE)
     end if
     ! Re-combine Nyquist in y (even ny only).
-    ! zeropad() split the Nyquist y-column into two halved copies; reconstruct
-    ! the original by doubling.  The column is real-valued by Hermitian symmetry.
+    ! The two y-Nyquist half-rows on the larger grid fold back onto the single
+    ! Nyquist row of the coarse grid: the kx=0 entry becomes real (doubled) and
+    ! the remaining kx entries pick up the mirror row from the larger grid.
     if (mod(ny, 2) == 0 .and. ny /= nyE) then
-        fh(1:nxh, nyh) = 2.0_dp * real(fh(1:nxh, nyh), dp)
+        fh(1, nyh) = 2.0_dp * real(fh(1, nyh), dp)
+        fh(2:nxh, nyh) = fh(2:nxh, nyh) + fhE(2:nxh, nyE - nyh + 2)
     end if
     ! Re-combine Nyquist in x (even nx only)
     if (mod(nx, 2) == 0 .and. nxh /= nxhE) then
